@@ -1,0 +1,12 @@
+{{define "error.tmpl"}}
+{{template "shell_start" .}}
+<section class="panel">
+  <h1>{{.Title}}</h1>
+  <p class="muted">{{.Message}}</p>
+  <div class="actions">
+    <a class="button" href="/admin/apps">앱 관리로 이동</a>
+    <a class="button secondary" href="/">홈으로 이동</a>
+  </div>
+</section>
+{{template "shell_end" .}}
+{{end}}

@@ -1,0 +1,6 @@
+.env
+ohmesh
+bin/
+tmp/
+*.db
+*.db-*

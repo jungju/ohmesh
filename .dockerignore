@@ -1,0 +1,7 @@
+.git
+.env
+bin
+tmp
+*.db
+*.db-*
+README.local

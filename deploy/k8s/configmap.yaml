@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ohmesh-config
+  labels:
+    app.kubernetes.io/name: ohmesh
+data:
+  OHMESH_ADDR: ":8080"
+  OHMESH_DATABASE_PATH: "/data/ohmesh.db"
+  OHMESH_ENV: "production"
+  OHMESH_SESSION_COOKIE: "ohmesh_session"
+  OHMESH_SESSION_TTL: "720h"
+  OHMESH_COOKIE_SECURE: "false"
+  OHMESH_ALLOWED_ORIGINS: "http://ohmesh.localhost,http://localhost:8080"
+  OHMESH_SESSION_SECRET: "local-dev-secret-change-me"

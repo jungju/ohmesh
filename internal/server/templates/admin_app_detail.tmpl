@@ -1,0 +1,87 @@
+{{define "admin_app_detail.tmpl"}}
+{{template "shell_start" .}}
+<div class="row">
+  <div>
+    <h1>{{.App.Name}}</h1>
+    <p class="muted"><code>{{.App.Slug}}</code></p>
+  </div>
+  <a class="button secondary" href="/login?app={{.App.Slug}}&redirect_url={{.App.DefaultRedirectURL}}">로그인 페이지</a>
+</div>
+
+<div class="tabs">
+  <a class="active" href="/admin/apps/{{.App.Slug}}">설정</a>
+  <a href="/admin/apps/{{.App.Slug}}/users">사용자</a>
+  <a href="/admin/apps/{{.App.Slug}}/db">DB</a>
+</div>
+
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+
+<section class="two-col">
+  <div class="panel">
+    <h2>앱 설정</h2>
+    <form method="post" action="/admin/apps/{{.App.Slug}}" class="form-grid">
+      <label>
+        Slug
+        <input value="{{.App.Slug}}" disabled>
+      </label>
+      <label>
+        상태
+        <select name="status">
+          <option value="active" {{if eq .App.Status "active"}}selected{{end}}>active</option>
+          <option value="disabled" {{if eq .App.Status "disabled"}}selected{{end}}>disabled</option>
+        </select>
+      </label>
+      <label class="wide">
+        이름
+        <input name="name" value="{{.App.Name}}" required>
+      </label>
+      <label class="wide">
+        기본 Redirect URL
+        <input name="default_redirect_url" value="{{.App.DefaultRedirectURL}}">
+      </label>
+      <div class="wide">
+        <button type="submit">저장</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>도메인</h2>
+    <form method="post" action="/admin/apps/{{.App.Slug}}/domains" class="stack">
+      <label>
+        Domain URL
+        <input name="domain" placeholder="https://username.github.io/app" required>
+      </label>
+      <label style="display:flex; gap:8px; align-items:center;">
+        <input type="checkbox" name="is_primary" style="width:auto;">
+        Primary domain
+      </label>
+      <button type="submit">도메인 추가</button>
+    </form>
+
+    <div style="margin-top: 18px;">
+      {{if .Domains}}
+        <table>
+          <thead><tr><th>Domain</th><th>Primary</th><th></th></tr></thead>
+          <tbody>
+          {{range .Domains}}
+            <tr>
+              <td><code>{{.Domain}}</code></td>
+              <td>{{if .IsPrimary}}<span class="pill active">primary</span>{{else}}<span class="muted">-</span>{{end}}</td>
+              <td>
+                <form method="post" action="/admin/apps/{{$.App.Slug}}/domains/{{.ID}}/delete">
+                  <button class="danger" type="submit">삭제</button>
+                </form>
+              </td>
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+      {{else}}
+        <div class="empty">등록된 도메인이 없습니다.</div>
+      {{end}}
+    </div>
+  </div>
+</section>
+{{template "shell_end" .}}
+{{end}}

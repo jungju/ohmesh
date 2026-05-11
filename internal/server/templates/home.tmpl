@@ -1,0 +1,60 @@
+{{define "home.tmpl"}}
+{{template "shell_start" .}}
+<section class="hero">
+  <div>
+    <h1>Static apps, one small backend.</h1>
+    <p class="lede">ohmesh는 GitHub Pages나 별도 도메인에 배포된 여러 정적 프론트엔드 앱이 공유하는 가벼운 API 플랫폼입니다.</p>
+    <div class="actions">
+      <a class="button" href="/admin/apps">앱 관리 열기</a>
+      <a class="button secondary" href="/login">로그인 페이지 보기</a>
+    </div>
+  </div>
+  <div class="panel map" aria-label="ohmesh architecture preview">
+    <div class="node main">
+      <strong>ohmesh API</strong>
+      <p class="muted">OAuth, sessions, domains, JSON CRUD</p>
+    </div>
+    <div class="grid">
+      <div class="node"><strong>jj</strong><br><span class="muted">custom domain</span></div>
+      <div class="node"><strong>notes</strong><br><span class="muted">GitHub Pages</span></div>
+      <div class="node"><strong>dashboard</strong><br><span class="muted">static app</span></div>
+    </div>
+    <div class="node">
+      <strong>SQLite v1</strong>
+      <p class="muted">사용자별 앱 데이터를 JSON text로 저장합니다.</p>
+    </div>
+  </div>
+</section>
+
+<section class="grid" aria-label="Current counts">
+  <div class="metric"><strong>{{.AppCount}}</strong><span class="muted">registered apps</span></div>
+  <div class="metric"><strong>{{.UserCount}}</strong><span class="muted">users</span></div>
+  <div class="metric"><strong>{{.RecordCount}}</strong><span class="muted">app records</span></div>
+</section>
+
+<section style="margin-top: 28px;" class="two-col">
+  <div class="plain-panel">
+    <h2>v1 범위</h2>
+    <p>Go, Gin, GORM, SQLite로 구성된 단일 API 서버입니다. 조직, 멤버십, 마이크로서비스 없이 개인 사용자 데이터 격리에 집중합니다.</p>
+  </div>
+  <div class="plain-panel">
+    <h2>최근 앱</h2>
+    {{if .Apps}}
+      <div class="stack">
+      {{range .Apps}}
+        <div class="row">
+          <div>
+            <strong>{{.Name}}</strong><br>
+            <span class="muted"><code>{{.Slug}}</code> · {{len .Domains}} domains</span>
+          </div>
+          <a class="button secondary" href="/admin/apps/{{.Slug}}">관리</a>
+        </div>
+      {{end}}
+      </div>
+    {{else}}
+      <div class="empty">아직 등록된 앱이 없습니다.</div>
+    {{end}}
+  </div>
+</section>
+{{template "shell_end" .}}
+{{end}}

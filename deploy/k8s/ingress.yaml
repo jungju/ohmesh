@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ohmesh
+  labels:
+    app.kubernetes.io/name: ohmesh
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: ohmesh.localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ohmesh
+                port:
+                  name: http

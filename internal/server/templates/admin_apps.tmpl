@@ -1,0 +1,66 @@
+{{define "admin_apps.tmpl"}}
+{{template "shell_start" .}}
+<div class="row">
+  <div>
+    <h1>앱 관리</h1>
+    <p class="muted">정적 프론트엔드 앱과 OAuth redirect 설정을 관리합니다.</p>
+  </div>
+</div>
+
+<div class="warning">현재 관리 페이지는 개발용입니다. 공개 배포 전에 관리자 인증을 추가하세요.</div>
+{{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+
+<section class="two-col">
+  <div class="panel">
+    <h2>앱 만들기</h2>
+    <form method="post" action="/admin/apps" class="form-grid">
+      <label>
+        Slug
+        <input name="slug" placeholder="notes" required>
+      </label>
+      <label>
+        이름
+        <input name="name" placeholder="Notes" required>
+      </label>
+      <label class="wide">
+        기본 Redirect URL
+        <input name="default_redirect_url" placeholder="https://username.github.io/notes">
+      </label>
+      <label>
+        상태
+        <select name="status">
+          <option value="active">active</option>
+          <option value="disabled">disabled</option>
+        </select>
+      </label>
+      <div class="wide">
+        <button type="submit">앱 만들기</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>등록된 앱</h2>
+    {{if .Apps}}
+      <table>
+        <thead>
+          <tr><th>앱</th><th>상태</th><th>도메인</th><th></th></tr>
+        </thead>
+        <tbody>
+        {{range .Apps}}
+          <tr>
+            <td><strong>{{.Name}}</strong><br><code>{{.Slug}}</code></td>
+            <td><span class="pill {{.Status}}">{{.Status}}</span></td>
+            <td>{{len .Domains}}</td>
+            <td><a class="button secondary" href="/admin/apps/{{.Slug}}">관리</a></td>
+          </tr>
+        {{end}}
+        </tbody>
+      </table>
+    {{else}}
+      <div class="empty">아직 등록된 앱이 없습니다.</div>
+    {{end}}
+  </div>
+</section>
+{{template "shell_end" .}}
+{{end}}

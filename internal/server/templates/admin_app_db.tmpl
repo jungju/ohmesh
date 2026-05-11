@@ -1,0 +1,96 @@
+{{define "admin_app_db.tmpl"}}
+{{template "shell_start" .}}
+<div class="row">
+  <div>
+    <h1>{{.App.Name}} DB</h1>
+    <p class="muted"><code>{{.App.Slug}}</code> 앱의 JSON 레코드입니다.</p>
+  </div>
+</div>
+
+<div class="tabs">
+  <a href="/admin/apps/{{.App.Slug}}">설정</a>
+  <a href="/admin/apps/{{.App.Slug}}/users">사용자</a>
+  <a class="active" href="/admin/apps/{{.App.Slug}}/db">DB</a>
+</div>
+
+<section class="two-col">
+  <div class="panel">
+    <h2>필터</h2>
+    <form method="get" action="/admin/apps/{{.App.Slug}}/db" class="form-grid">
+      <label>
+        Type
+        <input name="type" value="{{.TypeFilter}}" placeholder="note">
+      </label>
+      <label>
+        User ID
+        <input name="user_id" value="{{.UserIDFilter}}" placeholder="1">
+      </label>
+      <label>
+        Limit
+        <input name="limit" type="number" min="1" max="500" value="{{.Limit}}">
+      </label>
+      <div style="align-self:end;">
+        <button type="submit">필터 적용</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>레코드 만들기</h2>
+    <form method="post" action="/admin/apps/{{.App.Slug}}/db/records" class="form-grid">
+      <label>
+        User ID
+        <select name="user_id" required>
+          <option value="">사용자 선택</option>
+          {{range .Users}}
+            <option value="{{.ID}}">{{if .Email}}{{.Email}}{{else}}User {{.ID}}{{end}} (#{{.ID}})</option>
+          {{end}}
+        </select>
+      </label>
+      <label>
+        Type
+        <input name="type" placeholder="note" required>
+      </label>
+      <label class="wide">
+        Data JSON
+        <textarea name="data" required>{"title":"Hello"}</textarea>
+      </label>
+      <div class="wide">
+        <button type="submit">레코드 만들기</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section style="margin-top: 20px;">
+  {{if .Records}}
+    <table>
+      <thead>
+        <tr><th>ID</th><th>User</th><th>Type</th><th>Data</th><th>Updated</th><th></th></tr>
+      </thead>
+      <tbody>
+      {{range .Records}}
+        <tr>
+          <td><code>#{{.ID}}</code></td>
+          <td>
+            <strong>{{if .User.Email}}{{.User.Email}}{{else}}User {{.UserID}}{{end}}</strong><br>
+            <code>{{.UserID}}</code>
+          </td>
+          <td><span class="pill">{{.Type}}</span></td>
+          <td><pre>{{jsonText .Data}}</pre></td>
+          <td>{{formatTime .UpdatedAt}}</td>
+          <td>
+            <form method="post" action="/admin/apps/{{$.App.Slug}}/db/records/{{.ID}}/delete">
+              <button class="danger" type="submit">삭제</button>
+            </form>
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <div class="empty">조건에 맞는 레코드가 없습니다.</div>
+  {{end}}
+</section>
+{{template "shell_end" .}}
+{{end}}

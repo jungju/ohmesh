@@ -201,6 +201,47 @@
       font-size: 28px;
       line-height: 1.1;
     }
+    .guide-hero {
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 10px 0 22px;
+    }
+    .guide-hero strong {
+      display: block;
+      color: var(--accent-strong);
+      font-size: clamp(30px, 4vw, 48px);
+      line-height: 1.05;
+      margin-bottom: 8px;
+    }
+    .steps {
+      counter-reset: step;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .step {
+      position: relative;
+      min-height: 150px;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+    }
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      display: inline-grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #e9f6f4;
+      color: var(--accent-strong);
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
     .map {
       display: grid;
       gap: 12px;
@@ -385,7 +426,7 @@
       background: white;
     }
     @media (max-width: 860px) {
-      .hero, .two-col, .grid, .form-grid { grid-template-columns: 1fr; }
+      .hero, .two-col, .grid, .form-grid, .steps { grid-template-columns: 1fr; }
       .nav { align-items: flex-start; flex-direction: column; padding-top: 12px; padding-bottom: 12px; }
       main { padding-top: 24px; }
     }

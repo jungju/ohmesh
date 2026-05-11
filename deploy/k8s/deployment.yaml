@@ -14,6 +14,8 @@ spec:
       labels:
         app.kubernetes.io/name: ohmesh
     spec:
+      imagePullSecrets:
+        - name: github
       containers:
         - name: ohmesh
           image: ghcr.io/jungju/ohmesh:main

@@ -45,6 +45,8 @@ Image:
 ghcr.io/jungju/ohmesh:main
 ```
 
+The included workflow currently builds this image for `linux/arm64`.
+
 Deploy with kubectl:
 
 ```sh

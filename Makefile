@@ -32,7 +32,7 @@ export GOOGLE_CLIENT_ID
 export GOOGLE_CLIENT_SECRET
 
 .PHONY: help env deps fmt test build check run start stop restart status logs health clean \
-	k8s-deploy k8s-status k8s-logs k8s-delete k8s-port-forward k8s-oauth-secret package-watch
+	k8s-deploy k8s-status k8s-logs k8s-delete k8s-port-forward k8s-oauth-secret k8s-ghcr-secret package-watch
 
 help:
 	@echo "ohmesh local commands"
@@ -56,6 +56,7 @@ help:
 	@echo "  make k8s-logs         Tail Kubernetes deployment logs"
 	@echo "  make k8s-port-forward Port-forward Kubernetes service to localhost:8080"
 	@echo "  make k8s-delete       Delete Kubernetes resources"
+	@echo "  make k8s-ghcr-secret  Create/update GHCR pull secret named github"
 	@echo "  make package-watch    Watch the latest container build workflow"
 
 env:
@@ -181,6 +182,14 @@ k8s-oauth-secret:
 		--from-literal=GITHUB_CLIENT_SECRET="$${GITHUB_CLIENT_SECRET:-}" \
 		--from-literal=GOOGLE_CLIENT_ID="$${GOOGLE_CLIENT_ID:-}" \
 		--from-literal=GOOGLE_CLIENT_SECRET="$${GOOGLE_CLIENT_SECRET:-}" \
+		--dry-run=client -o yaml | kubectl apply -f -
+
+k8s-ghcr-secret:
+	kubectl create namespace "$(K8S_NAMESPACE)" --dry-run=client -o yaml | kubectl apply -f -
+	kubectl -n "$(K8S_NAMESPACE)" create secret docker-registry github \
+		--docker-server=ghcr.io \
+		--docker-username="$(GITHUB_OWNER)" \
+		--docker-password="$$(gh auth token)" \
 		--dry-run=client -o yaml | kubectl apply -f -
 
 package-watch:

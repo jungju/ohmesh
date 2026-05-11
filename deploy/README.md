@@ -8,6 +8,9 @@ The default image is:
 ghcr.io/jungju/ohmesh:main
 ```
 
+The GitHub Actions workflow builds the image for `linux/arm64`, matching the
+local Kubernetes cluster.
+
 Deploy:
 
 ```sh
@@ -47,6 +50,12 @@ GitHub or Google login, export the credential environment variables and run:
 ```sh
 make k8s-oauth-secret
 kubectl -n ohmesh rollout restart deploy/ohmesh
+```
+
+If your GHCR package is private, create the pull secret used by the deployment:
+
+```sh
+make k8s-ghcr-secret
 ```
 
 The default SQLite database is stored on a `PersistentVolumeClaim` named

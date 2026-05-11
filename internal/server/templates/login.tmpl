@@ -2,8 +2,8 @@
 {{template "shell_start" .}}
 <div class="row">
   <div>
-    <h1>로그인</h1>
-    <p class="muted">정적 앱에서 사용할 OAuth 로그인 진입점입니다.</p>
+    <h1>ohmesh 로그인</h1>
+    <p class="muted">내 앱과 사용자 데이터 관리를 위해 ohmesh에 로그인합니다.</p>
   </div>
 </div>
 
@@ -11,32 +11,7 @@
 
 <section class="two-col">
   <div class="panel">
-    <h2>앱 선택</h2>
-    <form method="get" action="/login" class="stack">
-      <label>
-        앱
-        <select name="app">
-          <option value="">앱을 선택하세요</option>
-          {{range .Apps}}
-            <option value="{{.Slug}}" {{if eq $.AppSlug .Slug}}selected{{end}}>{{.Name}} ({{.Slug}})</option>
-          {{end}}
-        </select>
-      </label>
-      <label>
-        Redirect URL
-        <input name="redirect_url" value="{{.RedirectURL}}" placeholder="https://example.com/app">
-      </label>
-      <button type="submit">로그인 옵션 보기</button>
-    </form>
-  </div>
-
-  <div class="panel">
-    <h2>OAuth Provider</h2>
-    {{if .AppReady}}
-      <p class="muted"><strong>{{.SelectedApp.Name}}</strong> 앱으로 로그인합니다.</p>
-    {{else}}
-      <p class="muted">앱과 redirect URL을 먼저 선택하세요.</p>
-    {{end}}
+    <h2>OAuth 로그인</h2>
     <div class="stack">
       {{range .Providers}}
         <div class="plain-panel">
@@ -54,6 +29,11 @@
         </div>
       {{end}}
     </div>
+  </div>
+
+  <div class="plain-panel">
+    <h2>앱 관리</h2>
+    <p class="muted">로그인 후 앱 등록, 도메인 설정, 사용자 세션, JSON 레코드를 한 곳에서 관리합니다.</p>
   </div>
 </section>
 {{template "shell_end" .}}

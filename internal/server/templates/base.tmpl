@@ -204,6 +204,47 @@
       flex-wrap: wrap;
     }
     .stack { display: grid; gap: 16px; }
+    .toolbar {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+    .toolbar label { min-width: min(420px, 100%); }
+    .inline-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .section {
+      margin-top: 22px;
+    }
+    .subtle-band {
+      background: var(--surface);
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      padding: 18px 0;
+    }
+    details.add-app > summary {
+      list-style: none;
+      width: max-content;
+    }
+    details.add-app > summary::-webkit-details-marker { display: none; }
+    .danger-zone {
+      border-color: #efb4ad;
+      background: #fffafa;
+    }
+    .table-form {
+      display: grid;
+      gap: 8px;
+      min-width: 260px;
+    }
+    .table-form textarea {
+      min-height: 110px;
+    }
     .tabs {
       display: flex;
       gap: 6px;
@@ -338,8 +379,7 @@
       <div class="navlinks">
         <a href="/" {{if eq .CurrentPath "/"}}class="active"{{end}}>소개</a>
         <a href="/login" {{if eq .CurrentPath "/login"}}class="active"{{end}}>로그인</a>
-        <a href="/admin/apps" {{if eq .CurrentPath "/admin/apps"}}class="active"{{end}}>앱 관리</a>
-        <a href="/healthz">헬스체크</a>
+        <a href="/admin/apps" {{if .AdminNavActive}}class="active"{{end}}>앱 관리</a>
       </div>
     </nav>
   </header>

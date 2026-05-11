@@ -66,6 +66,14 @@ func (s *Server) render(c *gin.Context, status int, name string, data gin.H) {
 	if _, ok := data["CurrentPath"]; !ok {
 		data["CurrentPath"] = c.Request.URL.Path
 	}
+	if _, ok := data["AdminNavActive"]; !ok {
+		data["AdminNavActive"] = c.Request.URL.Path == "/admin" || strings.HasPrefix(c.Request.URL.Path, "/admin/")
+	}
+	if _, ok := data["AdminUser"]; !ok {
+		if value, exists := c.Get("adminUser"); exists {
+			data["AdminUser"] = value
+		}
+	}
 	if _, ok := data["Notice"]; !ok {
 		data["Notice"] = c.Query("notice")
 	}
@@ -100,88 +108,61 @@ func (s *Server) homePage(c *gin.Context) {
 }
 
 func (s *Server) loginPage(c *gin.Context) {
-	var apps []models.App
-	s.db.Where("status = ?", models.AppStatusActive).Order("name ASC").Find(&apps)
-
-	appSlug := strings.TrimSpace(c.Query("app"))
-	redirectURL := strings.TrimSpace(c.Query("redirect_url"))
-
-	var selectedApp models.App
-	var loginError string
-	appReady := false
-	if appSlug != "" {
-		app, err := s.loadActiveApp(appSlug)
-		if err != nil {
-			loginError = "선택한 앱을 찾을 수 없거나 비활성화되어 있습니다."
-		} else {
-			selectedApp = app
-			if redirectURL == "" {
-				redirectURL = app.DefaultRedirectURL
-			}
-			normalized, err := normalizeBaseURL(redirectURL)
-			if err != nil {
-				loginError = "redirect_url은 http 또는 https URL이어야 합니다."
-			} else if !s.redirectAllowed(app, normalized) {
-				loginError = "redirect_url이 앱에 등록된 URL과 일치하지 않습니다."
-			} else {
-				redirectURL = normalized
-				appReady = true
-			}
-		}
+	next := safeAdminPath(c.Query("next"))
+	if session, _, ok := s.sessionFromCookie(c); ok && session.AppID == adminSessionAppID {
+		c.Redirect(http.StatusSeeOther, next)
+		return
 	}
 
+	redirectURL := absoluteAdminURL(c, next)
 	providers := []loginProvider{
 		{
 			Name:          "GitHub",
-			LoginURL:      oauthLoginURL("/auth/github/login", appSlug, redirectURL),
-			Enabled:       appReady && s.cfg.GitHubClientID != "" && s.cfg.GitHubClientSecret != "",
+			LoginURL:      adminOAuthLoginURL("/auth/github/login", redirectURL),
+			Enabled:       s.cfg.GitHubClientID != "" && s.cfg.GitHubClientSecret != "",
 			MissingConfig: "GITHUB_CLIENT_ID 또는 GITHUB_CLIENT_SECRET이 없습니다.",
 		},
 		{
 			Name:          "Google",
-			LoginURL:      oauthLoginURL("/auth/google/login", appSlug, redirectURL),
-			Enabled:       appReady && s.cfg.GoogleClientID != "" && s.cfg.GoogleClientSecret != "",
+			LoginURL:      adminOAuthLoginURL("/auth/google/login", redirectURL),
+			Enabled:       s.cfg.GoogleClientID != "" && s.cfg.GoogleClientSecret != "",
 			MissingConfig: "GOOGLE_CLIENT_ID 또는 GOOGLE_CLIENT_SECRET이 없습니다.",
 		},
 	}
 
 	s.render(c, http.StatusOK, "login.tmpl", gin.H{
-		"Title":       "Login",
-		"Apps":        apps,
-		"SelectedApp": selectedApp,
-		"AppSlug":     appSlug,
-		"RedirectURL": redirectURL,
-		"Providers":   providers,
-		"LoginError":  loginError,
-		"AppReady":    appReady,
+		"Title":     "Login",
+		"Providers": providers,
+		"Next":      next,
 	})
 }
 
 func (s *Server) webListApps(c *gin.Context) {
-	s.renderAppList(c, http.StatusOK, "")
+	s.renderAppManager(c, http.StatusOK, "", c.Query("app"))
 }
 
 func (s *Server) webCreateApp(c *gin.Context) {
 	app, err := appFromForm(c)
 	if err != nil {
-		s.renderAppList(c, http.StatusBadRequest, err.Error())
+		s.renderAppManager(c, http.StatusBadRequest, err.Error(), c.Query("app"))
 		return
 	}
+	app.OwnerID = adminUserFromContext(c).ID
 
 	if err := s.db.Create(&app).Error; err != nil {
-		s.renderAppList(c, http.StatusConflict, "이미 사용 중인 앱 slug입니다.")
+		s.renderAppManager(c, http.StatusConflict, "이미 사용 중인 앱 slug입니다.", c.Query("app"))
 		return
 	}
 
-	redirectWithNotice(c, "/admin/apps/"+url.PathEscape(app.Slug), "앱을 만들었습니다.")
+	redirectWithNotice(c, appManagerPath(app.Slug), "앱을 만들었습니다.")
 }
 
 func (s *Server) webAppDetail(c *gin.Context) {
-	s.renderAppDetail(c, http.StatusOK, "")
+	s.renderAppManager(c, http.StatusOK, "", c.Param("slug"))
 }
 
 func (s *Server) webUpdateApp(c *gin.Context) {
-	app, err := s.appBySlug(c.Param("slug"))
+	app, err := s.appBySlugForOwner(c.Param("slug"), adminUserFromContext(c).ID)
 	if err != nil {
 		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
 		return
@@ -190,7 +171,7 @@ func (s *Server) webUpdateApp(c *gin.Context) {
 	updates := map[string]any{}
 	name := strings.TrimSpace(c.PostForm("name"))
 	if name == "" {
-		s.renderAppDetail(c, http.StatusBadRequest, "앱 이름이 필요합니다.")
+		s.renderAppManager(c, http.StatusBadRequest, "앱 이름이 필요합니다.", app.Slug)
 		return
 	}
 	updates["name"] = name
@@ -199,7 +180,7 @@ func (s *Server) webUpdateApp(c *gin.Context) {
 	if redirectURL != "" {
 		normalized, err := normalizeBaseURL(redirectURL)
 		if err != nil {
-			s.renderAppDetail(c, http.StatusBadRequest, "기본 redirect URL이 올바르지 않습니다.")
+			s.renderAppManager(c, http.StatusBadRequest, "기본 redirect URL이 올바르지 않습니다.", app.Slug)
 			return
 		}
 		updates["default_redirect_url"] = normalized
@@ -209,21 +190,48 @@ func (s *Server) webUpdateApp(c *gin.Context) {
 
 	status := strings.TrimSpace(c.PostForm("status"))
 	if !validAppStatus(status) {
-		s.renderAppDetail(c, http.StatusBadRequest, "앱 상태가 올바르지 않습니다.")
+		s.renderAppManager(c, http.StatusBadRequest, "앱 상태가 올바르지 않습니다.", app.Slug)
 		return
 	}
 	updates["status"] = status
 
 	if err := s.db.Model(&app).Updates(updates).Error; err != nil {
-		s.renderAppDetail(c, http.StatusInternalServerError, "앱을 저장하지 못했습니다.")
+		s.renderAppManager(c, http.StatusInternalServerError, "앱을 저장하지 못했습니다.", app.Slug)
 		return
 	}
 
-	redirectWithNotice(c, "/admin/apps/"+url.PathEscape(app.Slug), "앱 설정을 저장했습니다.")
+	redirectWithNotice(c, appManagerPath(app.Slug), "앱 설정을 저장했습니다.")
+}
+
+func (s *Server) webDeleteApp(c *gin.Context) {
+	app, err := s.appBySlugForOwner(c.Param("slug"), adminUserFromContext(c).ID)
+	if err != nil {
+		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
+		return
+	}
+
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("app_id = ?", app.ID).Delete(&models.AppDomain{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("app_id = ?", app.ID).Delete(&models.Session{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("app_id = ?", app.ID).Delete(&models.AppRecord{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&app).Error
+	})
+	if err != nil {
+		s.renderAppManager(c, http.StatusInternalServerError, "앱을 삭제하지 못했습니다.", app.Slug)
+		return
+	}
+
+	redirectWithNotice(c, "/admin/apps", "앱을 삭제했습니다.")
 }
 
 func (s *Server) webCreateAppDomain(c *gin.Context) {
-	app, err := s.appBySlug(c.Param("slug"))
+	app, err := s.appBySlugForOwner(c.Param("slug"), adminUserFromContext(c).ID)
 	if err != nil {
 		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
 		return
@@ -231,7 +239,7 @@ func (s *Server) webCreateAppDomain(c *gin.Context) {
 
 	domain, err := normalizeBaseURL(c.PostForm("domain"))
 	if err != nil {
-		s.renderAppDetail(c, http.StatusBadRequest, "도메인 URL이 올바르지 않습니다.")
+		s.renderAppManager(c, http.StatusBadRequest, "도메인 URL이 올바르지 않습니다.", app.Slug)
 		return
 	}
 
@@ -250,15 +258,15 @@ func (s *Server) webCreateAppDomain(c *gin.Context) {
 		return tx.Create(&appDomain).Error
 	})
 	if err != nil {
-		s.renderAppDetail(c, http.StatusConflict, "이미 등록된 도메인입니다.")
+		s.renderAppManager(c, http.StatusConflict, "이미 등록된 도메인입니다.", app.Slug)
 		return
 	}
 
-	redirectWithNotice(c, "/admin/apps/"+url.PathEscape(app.Slug), "도메인을 추가했습니다.")
+	redirectWithNotice(c, appManagerPath(app.Slug), "도메인을 추가했습니다.")
 }
 
 func (s *Server) webDeleteAppDomain(c *gin.Context) {
-	app, err := s.appBySlug(c.Param("slug"))
+	app, err := s.appBySlugForOwner(c.Param("slug"), adminUserFromContext(c).ID)
 	if err != nil {
 		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
 		return
@@ -270,18 +278,178 @@ func (s *Server) webDeleteAppDomain(c *gin.Context) {
 	}
 
 	s.db.Where("id = ? AND app_id = ?", domainID, app.ID).Delete(&models.AppDomain{})
-	redirectWithNotice(c, "/admin/apps/"+url.PathEscape(app.Slug), "도메인을 삭제했습니다.")
+	redirectWithNotice(c, appManagerPath(app.Slug), "도메인을 삭제했습니다.")
 }
 
 func (s *Server) webAppUsers(c *gin.Context) {
-	app, err := s.appBySlug(c.Param("slug"))
+	s.renderAppManager(c, http.StatusOK, "", c.Param("slug"))
+}
+
+func (s *Server) webExpireAppUserSessions(c *gin.Context) {
+	app, err := s.appBySlugForOwner(c.Param("slug"), adminUserFromContext(c).ID)
+	if err != nil {
+		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
+		return
+	}
+	userID, ok := parseWebUint(c, "id")
+	if !ok {
+		return
+	}
+
+	s.db.Where("app_id = ? AND user_id = ?", app.ID, userID).Delete(&models.Session{})
+	redirectWithNotice(c, appManagerPath(app.Slug), "사용자의 앱 세션을 만료했습니다.")
+}
+
+func (s *Server) webAppDB(c *gin.Context) {
+	s.renderAppManager(c, http.StatusOK, "", c.Param("slug"))
+}
+
+func (s *Server) webCreateAppRecord(c *gin.Context) {
+	app, err := s.appBySlugForOwner(c.Param("slug"), adminUserFromContext(c).ID)
 	if err != nil {
 		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
 		return
 	}
 
+	userID, err := strconv.ParseUint(strings.TrimSpace(c.PostForm("user_id")), 10, 64)
+	if err != nil || userID == 0 {
+		s.renderAppManager(c, http.StatusBadRequest, "user_id가 필요합니다.", app.Slug)
+		return
+	}
+
+	recordType, err := normalizeRecordType(c.PostForm("type"))
+	if err != nil {
+		s.renderAppManager(c, http.StatusBadRequest, err.Error(), app.Slug)
+		return
+	}
+
+	rawData := strings.TrimSpace(c.PostForm("data"))
+	if !json.Valid([]byte(rawData)) {
+		s.renderAppManager(c, http.StatusBadRequest, "data는 유효한 JSON이어야 합니다.", app.Slug)
+		return
+	}
+
+	var user models.User
+	if err := s.db.First(&user, uint(userID)).Error; err != nil {
+		s.renderAppManager(c, http.StatusBadRequest, "존재하지 않는 user_id입니다.", app.Slug)
+		return
+	}
+
+	record := models.AppRecord{
+		AppID:  app.ID,
+		UserID: uint(userID),
+		Type:   recordType,
+		Data:   models.JSONText(rawData),
+	}
+	if err := s.db.Create(&record).Error; err != nil {
+		s.renderAppManager(c, http.StatusInternalServerError, "레코드를 만들지 못했습니다.", app.Slug)
+		return
+	}
+
+	redirectWithNotice(c, appManagerPath(app.Slug), "레코드를 만들었습니다.")
+}
+
+func (s *Server) webUpdateAppRecord(c *gin.Context) {
+	app, err := s.appBySlugForOwner(c.Param("slug"), adminUserFromContext(c).ID)
+	if err != nil {
+		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
+		return
+	}
+	recordID, ok := parseWebUint(c, "id")
+	if !ok {
+		return
+	}
+
+	recordType, err := normalizeRecordType(c.PostForm("type"))
+	if err != nil {
+		s.renderAppManager(c, http.StatusBadRequest, err.Error(), app.Slug)
+		return
+	}
+
+	rawData := strings.TrimSpace(c.PostForm("data"))
+	if !json.Valid([]byte(rawData)) {
+		s.renderAppManager(c, http.StatusBadRequest, "data는 유효한 JSON이어야 합니다.", app.Slug)
+		return
+	}
+
+	result := s.db.Model(&models.AppRecord{}).
+		Where("id = ? AND app_id = ?", recordID, app.ID).
+		Updates(map[string]any{"type": recordType, "data": models.JSONText(rawData)})
+	if result.Error != nil {
+		s.renderAppManager(c, http.StatusInternalServerError, "레코드를 저장하지 못했습니다.", app.Slug)
+		return
+	}
+	if result.RowsAffected == 0 {
+		s.renderErrorPage(c, http.StatusNotFound, "Record not found", "레코드를 찾을 수 없습니다.")
+		return
+	}
+
+	redirectWithNotice(c, appManagerPath(app.Slug), "레코드를 저장했습니다.")
+}
+
+func (s *Server) webDeleteAppRecord(c *gin.Context) {
+	app, err := s.appBySlugForOwner(c.Param("slug"), adminUserFromContext(c).ID)
+	if err != nil {
+		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
+		return
+	}
+	recordID, ok := parseWebUint(c, "id")
+	if !ok {
+		return
+	}
+
+	s.db.Where("id = ? AND app_id = ?", recordID, app.ID).Delete(&models.AppRecord{})
+	redirectWithNotice(c, appManagerPath(app.Slug), "레코드를 삭제했습니다.")
+}
+
+func (s *Server) renderAppManager(c *gin.Context, status int, errorMessage, selectedSlug string) {
+	adminUser := adminUserFromContext(c)
+	var apps []models.App
+	s.db.Preload("Domains").Where("owner_id = ?", adminUser.ID).Order("name ASC, created_at DESC").Find(&apps)
+
+	if selectedSlug == "" && len(apps) > 0 {
+		selectedSlug = apps[0].Slug
+	}
+
+	data := gin.H{
+		"Title":        "Apps",
+		"Apps":         apps,
+		"SelectedSlug": selectedSlug,
+		"Error":        errorMessage,
+		"Limit":        boundedIntQuery(c.Query("limit"), 100, 1, 500),
+		"TypeFilter":   strings.TrimSpace(c.Query("type")),
+		"UserIDFilter": strings.TrimSpace(c.Query("user_id")),
+	}
+
+	if selectedSlug != "" {
+		app, err := s.appBySlugForOwner(selectedSlug, adminUser.ID)
+		if err == nil {
+			domains, _ := s.appDomains(app.ID)
+			users, _ := s.appUsers(app.ID)
+			recordUsers, _ := s.appRecordUsers(app.ID)
+			records, _ := s.filteredAppRecords(c, app.ID)
+			data["SelectedApp"] = app
+			data["Domains"] = domains
+			data["Users"] = users
+			data["RecordUsers"] = recordUsers
+			data["Records"] = records
+		} else if errorMessage == "" {
+			data["Error"] = "선택한 앱을 찾을 수 없습니다."
+		}
+	}
+
+	s.render(c, status, "admin_apps.tmpl", data)
+}
+
+func (s *Server) appDomains(appID uint) ([]models.AppDomain, error) {
+	var domains []models.AppDomain
+	err := s.db.Where("app_id = ?", appID).Order("is_primary DESC, created_at ASC").Find(&domains).Error
+	return domains, err
+}
+
+func (s *Server) appUsers(appID uint) ([]appUserRow, error) {
 	var users []appUserRow
-	err = s.db.Raw(`
+	err := s.db.Raw(`
 		SELECT
 			users.id,
 			users.email,
@@ -295,43 +463,25 @@ func (s *Server) webAppUsers(c *gin.Context) {
 		WHERE EXISTS (SELECT 1 FROM sessions WHERE sessions.user_id = users.id AND sessions.app_id = ?)
 		   OR EXISTS (SELECT 1 FROM app_records WHERE app_records.user_id = users.id AND app_records.app_id = ?)
 		ORDER BY users.updated_at DESC
-	`, app.ID, app.ID, app.ID, app.ID, app.ID, app.ID).Scan(&users).Error
-	if err != nil {
-		s.renderErrorPage(c, http.StatusInternalServerError, "Users failed", "사용자 목록을 불러오지 못했습니다.")
-		return
-	}
-
-	s.render(c, http.StatusOK, "admin_app_users.tmpl", gin.H{
-		"Title": "App Users",
-		"App":   app,
-		"Users": users,
-	})
+	`, appID, appID, appID, appID, appID, appID).Scan(&users).Error
+	return users, err
 }
 
-func (s *Server) webExpireAppUserSessions(c *gin.Context) {
-	app, err := s.appBySlug(c.Param("slug"))
-	if err != nil {
-		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
-		return
-	}
-	userID, ok := parseWebUint(c, "id")
-	if !ok {
-		return
-	}
-
-	s.db.Where("app_id = ? AND user_id = ?", app.ID, userID).Delete(&models.Session{})
-	redirectWithNotice(c, "/admin/apps/"+url.PathEscape(app.Slug)+"/users", "사용자의 앱 세션을 만료했습니다.")
+func (s *Server) appRecordUsers(appID uint) ([]models.User, error) {
+	var users []models.User
+	err := s.db.Raw(`
+		SELECT DISTINCT users.*
+		FROM users
+		WHERE EXISTS (SELECT 1 FROM sessions WHERE sessions.user_id = users.id AND sessions.app_id = ?)
+		   OR EXISTS (SELECT 1 FROM app_records WHERE app_records.user_id = users.id AND app_records.app_id = ?)
+		ORDER BY users.email ASC, users.id ASC
+	`, appID, appID).Scan(&users).Error
+	return users, err
 }
 
-func (s *Server) webAppDB(c *gin.Context) {
-	app, err := s.appBySlug(c.Param("slug"))
-	if err != nil {
-		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
-		return
-	}
-
+func (s *Server) filteredAppRecords(c *gin.Context, appID uint) ([]models.AppRecord, error) {
 	limit := boundedIntQuery(c.Query("limit"), 100, 1, 500)
-	query := s.db.Preload("User").Where("app_id = ?", app.ID)
+	query := s.db.Preload("User").Where("app_id = ?", appID)
 
 	typeFilter := strings.TrimSpace(c.Query("type"))
 	if typeFilter != "" {
@@ -347,116 +497,8 @@ func (s *Server) webAppDB(c *gin.Context) {
 	}
 
 	var records []models.AppRecord
-	if err := query.Order("updated_at DESC").Limit(limit).Find(&records).Error; err != nil {
-		s.renderErrorPage(c, http.StatusInternalServerError, "Records failed", "레코드 목록을 불러오지 못했습니다.")
-		return
-	}
-
-	var users []models.User
-	s.db.Order("email ASC, id ASC").Find(&users)
-
-	s.render(c, http.StatusOK, "admin_app_db.tmpl", gin.H{
-		"Title":        "App DB",
-		"App":          app,
-		"Records":      records,
-		"Users":        users,
-		"TypeFilter":   typeFilter,
-		"UserIDFilter": userIDFilter,
-		"Limit":        limit,
-	})
-}
-
-func (s *Server) webCreateAppRecord(c *gin.Context) {
-	app, err := s.appBySlug(c.Param("slug"))
-	if err != nil {
-		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
-		return
-	}
-
-	userID, err := strconv.ParseUint(strings.TrimSpace(c.PostForm("user_id")), 10, 64)
-	if err != nil || userID == 0 {
-		s.renderErrorPage(c, http.StatusBadRequest, "Invalid user", "user_id가 필요합니다.")
-		return
-	}
-
-	recordType, err := normalizeRecordType(c.PostForm("type"))
-	if err != nil {
-		s.renderErrorPage(c, http.StatusBadRequest, "Invalid type", err.Error())
-		return
-	}
-
-	rawData := strings.TrimSpace(c.PostForm("data"))
-	if !json.Valid([]byte(rawData)) {
-		s.renderErrorPage(c, http.StatusBadRequest, "Invalid JSON", "data는 유효한 JSON이어야 합니다.")
-		return
-	}
-
-	var user models.User
-	if err := s.db.First(&user, uint(userID)).Error; err != nil {
-		s.renderErrorPage(c, http.StatusBadRequest, "Invalid user", "존재하지 않는 user_id입니다.")
-		return
-	}
-
-	record := models.AppRecord{
-		AppID:  app.ID,
-		UserID: uint(userID),
-		Type:   recordType,
-		Data:   models.JSONText(rawData),
-	}
-	if err := s.db.Create(&record).Error; err != nil {
-		s.renderErrorPage(c, http.StatusInternalServerError, "Create failed", "레코드를 만들지 못했습니다.")
-		return
-	}
-
-	redirectWithNotice(c, "/admin/apps/"+url.PathEscape(app.Slug)+"/db", "레코드를 만들었습니다.")
-}
-
-func (s *Server) webDeleteAppRecord(c *gin.Context) {
-	app, err := s.appBySlug(c.Param("slug"))
-	if err != nil {
-		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
-		return
-	}
-	recordID, ok := parseWebUint(c, "id")
-	if !ok {
-		return
-	}
-
-	s.db.Where("id = ? AND app_id = ?", recordID, app.ID).Delete(&models.AppRecord{})
-	redirectWithNotice(c, "/admin/apps/"+url.PathEscape(app.Slug)+"/db", "레코드를 삭제했습니다.")
-}
-
-func (s *Server) renderAppList(c *gin.Context, status int, errorMessage string) {
-	var apps []models.App
-	s.db.Preload("Domains").Order("created_at DESC").Find(&apps)
-
-	s.render(c, status, "admin_apps.tmpl", gin.H{
-		"Title": "Apps",
-		"Apps":  apps,
-		"Error": errorMessage,
-	})
-}
-
-func (s *Server) renderAppDetail(c *gin.Context, status int, errorMessage string) {
-	app, err := s.appBySlug(c.Param("slug"))
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
-		return
-	}
-	if err != nil {
-		s.renderErrorPage(c, http.StatusInternalServerError, "App failed", "앱 정보를 불러오지 못했습니다.")
-		return
-	}
-
-	var domains []models.AppDomain
-	s.db.Where("app_id = ?", app.ID).Order("is_primary DESC, created_at ASC").Find(&domains)
-
-	s.render(c, status, "admin_app_detail.tmpl", gin.H{
-		"Title":   "App Detail",
-		"App":     app,
-		"Domains": domains,
-		"Error":   errorMessage,
-	})
+	err := query.Order("updated_at DESC").Limit(limit).Find(&records).Error
+	return records, err
 }
 
 func appFromForm(c *gin.Context) (models.App, error) {
@@ -494,11 +536,26 @@ func appFromForm(c *gin.Context) (models.App, error) {
 	}, nil
 }
 
-func oauthLoginURL(path, appSlug, redirectURL string) string {
+func adminOAuthLoginURL(path, redirectURL string) string {
 	values := url.Values{}
-	values.Set("app", appSlug)
+	values.Set("admin", "1")
 	values.Set("redirect_url", redirectURL)
 	return path + "?" + values.Encode()
+}
+
+func adminUserFromContext(c *gin.Context) models.User {
+	value, _ := c.Get("adminUser")
+	user, _ := value.(models.User)
+	return user
+}
+
+func appManagerPath(slug string) string {
+	if slug == "" {
+		return "/admin/apps"
+	}
+	values := url.Values{}
+	values.Set("app", slug)
+	return "/admin/apps?" + values.Encode()
 }
 
 func parseWebUint(c *gin.Context, name string) (uint, bool) {
@@ -511,7 +568,12 @@ func parseWebUint(c *gin.Context, name string) (uint, bool) {
 }
 
 func redirectWithNotice(c *gin.Context, path, notice string) {
-	values := url.Values{}
+	target, err := url.Parse(path)
+	if err != nil {
+		target = &url.URL{Path: "/admin/apps"}
+	}
+	values := target.Query()
 	values.Set("notice", notice)
-	c.Redirect(http.StatusSeeOther, path+"?"+values.Encode())
+	target.RawQuery = values.Encode()
+	c.Redirect(http.StatusSeeOther, target.String())
 }

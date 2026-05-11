@@ -29,6 +29,7 @@ const googleUserInfoURL = "https://openidconnect.googleapis.com/v1/userinfo"
 type oauthState struct {
 	AppSlug     string    `json:"app_slug"`
 	RedirectURL string    `json:"redirect_url"`
+	Admin       bool      `json:"admin"`
 	Nonce       string    `json:"nonce"`
 	CreatedAt   time.Time `json:"created_at"`
 }
@@ -91,7 +92,7 @@ func (s *Server) githubLogin(c *gin.Context) {
 		return
 	}
 
-	app, redirectURL, ok := s.oauthStartParams(c)
+	state, ok := s.oauthStartState(c)
 	if !ok {
 		return
 	}
@@ -102,12 +103,10 @@ func (s *Server) githubLogin(c *gin.Context) {
 		return
 	}
 
-	state, err := s.signState(oauthState{
-		AppSlug:     app.Slug,
-		RedirectURL: redirectURL,
-		Nonce:       nonce,
-		CreatedAt:   time.Now().UTC(),
-	})
+	state.Nonce = nonce
+	state.CreatedAt = time.Now().UTC()
+
+	signedState, err := s.signState(state)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "internal server error")
 		return
@@ -116,7 +115,7 @@ func (s *Server) githubLogin(c *gin.Context) {
 	values := url.Values{}
 	values.Set("client_id", s.cfg.GitHubClientID)
 	values.Set("scope", "read:user user:email")
-	values.Set("state", state)
+	values.Set("state", signedState)
 
 	c.Redirect(http.StatusFound, githubOAuthAuthorizeURL+"?"+values.Encode())
 }
@@ -127,7 +126,7 @@ func (s *Server) googleLogin(c *gin.Context) {
 		return
 	}
 
-	app, redirectURL, ok := s.oauthStartParams(c)
+	state, ok := s.oauthStartState(c)
 	if !ok {
 		return
 	}
@@ -138,12 +137,10 @@ func (s *Server) googleLogin(c *gin.Context) {
 		return
 	}
 
-	state, err := s.signState(oauthState{
-		AppSlug:     app.Slug,
-		RedirectURL: redirectURL,
-		Nonce:       nonce,
-		CreatedAt:   time.Now().UTC(),
-	})
+	state.Nonce = nonce
+	state.CreatedAt = time.Now().UTC()
+
+	signedState, err := s.signState(state)
 	if err != nil {
 		respondError(c, http.StatusInternalServerError, "internal server error")
 		return
@@ -154,7 +151,7 @@ func (s *Server) googleLogin(c *gin.Context) {
 	values.Set("redirect_uri", callbackURL(c, "/auth/google/callback"))
 	values.Set("response_type", "code")
 	values.Set("scope", "openid email profile")
-	values.Set("state", state)
+	values.Set("state", signedState)
 	values.Set("access_type", "offline")
 	values.Set("prompt", "select_account")
 
@@ -183,13 +180,8 @@ func (s *Server) githubCallback(c *gin.Context) {
 		return
 	}
 
-	app, err := s.loadActiveApp(state.AppSlug)
-	if err != nil {
-		respondDBError(c, err, "app not found")
-		return
-	}
-	if !s.redirectAllowed(app, state.RedirectURL) {
-		respondError(c, http.StatusBadRequest, "redirect_url is not registered for app")
+	appID, ok := s.oauthSessionAppID(c, state)
+	if !ok {
 		return
 	}
 
@@ -211,7 +203,7 @@ func (s *Server) githubCallback(c *gin.Context) {
 		return
 	}
 
-	if err := s.createSession(c, user.ID, app.ID); err != nil {
+	if err := s.createSession(c, user.ID, appID); err != nil {
 		respondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -241,13 +233,8 @@ func (s *Server) googleCallback(c *gin.Context) {
 		return
 	}
 
-	app, err := s.loadActiveApp(state.AppSlug)
-	if err != nil {
-		respondDBError(c, err, "app not found")
-		return
-	}
-	if !s.redirectAllowed(app, state.RedirectURL) {
-		respondError(c, http.StatusBadRequest, "redirect_url is not registered for app")
+	appID, ok := s.oauthSessionAppID(c, state)
+	if !ok {
 		return
 	}
 
@@ -277,7 +264,7 @@ func (s *Server) googleCallback(c *gin.Context) {
 		return
 	}
 
-	if err := s.createSession(c, user.ID, app.ID); err != nil {
+	if err := s.createSession(c, user.ID, appID); err != nil {
 		respondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -292,18 +279,22 @@ func (s *Server) me(c *gin.Context) {
 	}
 
 	var app models.App
-	if err := s.db.First(&app, session.AppID).Error; err != nil {
-		respondError(c, http.StatusInternalServerError, "internal server error")
-		return
+	appResponse := any(nil)
+	if session.AppID != adminSessionAppID {
+		if err := s.db.First(&app, session.AppID).Error; err != nil {
+			respondError(c, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		appResponse = gin.H{
+			"id":   app.ID,
+			"slug": app.Slug,
+			"name": app.Name,
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"user": user,
-		"app": gin.H{
-			"id":   app.ID,
-			"slug": app.Slug,
-			"name": app.Name,
-		},
+		"app":  appResponse,
 		"session": gin.H{
 			"expires_at": session.ExpiresAt,
 		},
@@ -364,6 +355,47 @@ func (s *Server) oauthStartParams(c *gin.Context) (models.App, string, bool) {
 	}
 
 	return app, redirectURL, true
+}
+
+func (s *Server) oauthStartState(c *gin.Context) (oauthState, bool) {
+	if c.Query("admin") == "1" {
+		redirectURL := strings.TrimSpace(c.Query("redirect_url"))
+		if redirectURL == "" {
+			redirectURL = absoluteAdminURL(c, "/admin/apps")
+		}
+		if !adminRedirectAllowed(c, redirectURL) {
+			respondError(c, http.StatusBadRequest, "invalid admin redirect_url")
+			return oauthState{}, false
+		}
+		return oauthState{RedirectURL: stripURLFragment(redirectURL), Admin: true}, true
+	}
+
+	app, redirectURL, ok := s.oauthStartParams(c)
+	if !ok {
+		return oauthState{}, false
+	}
+	return oauthState{AppSlug: app.Slug, RedirectURL: redirectURL}, true
+}
+
+func (s *Server) oauthSessionAppID(c *gin.Context, state oauthState) (uint, bool) {
+	if state.Admin {
+		if !adminRedirectAllowed(c, state.RedirectURL) {
+			respondError(c, http.StatusBadRequest, "invalid admin redirect_url")
+			return 0, false
+		}
+		return adminSessionAppID, true
+	}
+
+	app, err := s.loadActiveApp(state.AppSlug)
+	if err != nil {
+		respondDBError(c, err, "app not found")
+		return 0, false
+	}
+	if !s.redirectAllowed(app, state.RedirectURL) {
+		respondError(c, http.StatusBadRequest, "redirect_url is not registered for app")
+		return 0, false
+	}
+	return app.ID, true
 }
 
 func (s *Server) exchangeGitHubCode(ctx context.Context, code string) (githubTokenResponse, error) {

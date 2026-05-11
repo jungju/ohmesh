@@ -27,6 +27,11 @@ type appDomainRequest struct {
 }
 
 func (s *Server) createApp(c *gin.Context) {
+	admin, ok := s.requireAdminSession(c)
+	if !ok {
+		return
+	}
+
 	var req appRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondError(c, http.StatusBadRequest, "invalid JSON body")
@@ -37,6 +42,7 @@ func (s *Server) createApp(c *gin.Context) {
 	if !ok {
 		return
 	}
+	app.OwnerID = admin.User.ID
 
 	if err := s.db.Create(&app).Error; err != nil {
 		respondError(c, http.StatusConflict, "app slug already exists")
@@ -47,8 +53,13 @@ func (s *Server) createApp(c *gin.Context) {
 }
 
 func (s *Server) listApps(c *gin.Context) {
+	admin, ok := s.requireAdminSession(c)
+	if !ok {
+		return
+	}
+
 	var apps []models.App
-	if err := s.db.Preload("Domains").Order("created_at DESC").Find(&apps).Error; err != nil {
+	if err := s.db.Preload("Domains").Where("owner_id = ?", admin.User.ID).Order("created_at DESC").Find(&apps).Error; err != nil {
 		respondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -56,18 +67,30 @@ func (s *Server) listApps(c *gin.Context) {
 }
 
 func (s *Server) getApp(c *gin.Context) {
-	var app models.App
-	err := s.db.Preload("Domains").Where("slug = ?", c.Param("slug")).First(&app).Error
+	admin, ok := s.requireAdminSession(c)
+	if !ok {
+		return
+	}
+
+	app, err := s.appBySlugForOwner(c.Param("slug"), admin.User.ID)
 	if err != nil {
 		respondDBError(c, err, "app not found")
+		return
+	}
+	if err := s.db.Preload("Domains").First(&app, app.ID).Error; err != nil {
+		respondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}
 	c.JSON(http.StatusOK, app)
 }
 
 func (s *Server) updateApp(c *gin.Context) {
-	var app models.App
-	err := s.db.Where("slug = ?", c.Param("slug")).First(&app).Error
+	admin, ok := s.requireAdminSession(c)
+	if !ok {
+		return
+	}
+
+	app, err := s.appBySlugForOwner(c.Param("slug"), admin.User.ID)
 	if err != nil {
 		respondDBError(c, err, "app not found")
 		return
@@ -113,8 +136,45 @@ func (s *Server) updateApp(c *gin.Context) {
 	c.JSON(http.StatusOK, app)
 }
 
+func (s *Server) deleteApp(c *gin.Context) {
+	admin, ok := s.requireAdminSession(c)
+	if !ok {
+		return
+	}
+
+	app, err := s.appBySlugForOwner(c.Param("slug"), admin.User.ID)
+	if err != nil {
+		respondDBError(c, err, "app not found")
+		return
+	}
+
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("app_id = ?", app.ID).Delete(&models.AppDomain{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("app_id = ?", app.ID).Delete(&models.Session{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("app_id = ?", app.ID).Delete(&models.AppRecord{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&app).Error
+	})
+	if err != nil {
+		respondError(c, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
 func (s *Server) createAppDomain(c *gin.Context) {
-	app, err := s.appBySlug(c.Param("slug"))
+	admin, ok := s.requireAdminSession(c)
+	if !ok {
+		return
+	}
+
+	app, err := s.appBySlugForOwner(c.Param("slug"), admin.User.ID)
 	if err != nil {
 		respondDBError(c, err, "app not found")
 		return
@@ -155,7 +215,12 @@ func (s *Server) createAppDomain(c *gin.Context) {
 }
 
 func (s *Server) listAppDomains(c *gin.Context) {
-	app, err := s.appBySlug(c.Param("slug"))
+	admin, ok := s.requireAdminSession(c)
+	if !ok {
+		return
+	}
+
+	app, err := s.appBySlugForOwner(c.Param("slug"), admin.User.ID)
 	if err != nil {
 		respondDBError(c, err, "app not found")
 		return
@@ -170,7 +235,12 @@ func (s *Server) listAppDomains(c *gin.Context) {
 }
 
 func (s *Server) deleteAppDomain(c *gin.Context) {
-	app, err := s.appBySlug(c.Param("slug"))
+	admin, ok := s.requireAdminSession(c)
+	if !ok {
+		return
+	}
+
+	app, err := s.appBySlugForOwner(c.Param("slug"), admin.User.ID)
 	if err != nil {
 		respondDBError(c, err, "app not found")
 		return
@@ -197,6 +267,12 @@ func (s *Server) deleteAppDomain(c *gin.Context) {
 func (s *Server) appBySlug(slug string) (models.App, error) {
 	var app models.App
 	err := s.db.Where("slug = ?", slug).First(&app).Error
+	return app, err
+}
+
+func (s *Server) appBySlugForOwner(slug string, ownerID uint) (models.App, error) {
+	var app models.App
+	err := s.db.Where("slug = ? AND owner_id = ?", slug, ownerID).First(&app).Error
 	return app, err
 }
 

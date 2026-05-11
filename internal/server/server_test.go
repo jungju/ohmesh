@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -32,7 +33,13 @@ func TestHealth(t *testing.T) {
 func TestWebPagesRender(t *testing.T) {
 	router, db := newTestRouter(t)
 
+	admin := models.User{Email: "admin@example.com", Name: "Admin"}
+	if err := db.Create(&admin).Error; err != nil {
+		t.Fatal(err)
+	}
+
 	app := models.App{
+		OwnerID:            admin.ID,
 		Slug:               "notes",
 		Name:               "Notes",
 		DefaultRedirectURL: "https://example.com/notes",
@@ -42,13 +49,21 @@ func TestWebPagesRender(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	adminToken := createTestSession(t, db, admin.ID, adminSessionAppID)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/apps", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("admin apps without login expected 303, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if location := rec.Header().Get("Location"); !strings.HasPrefix(location, "/login?") {
+		t.Fatalf("expected redirect to login, got %q", location)
+	}
+
 	tests := []string{
 		"/",
 		"/login?app=notes&redirect_url=https://example.com/notes",
-		"/admin/apps",
-		"/admin/apps/notes",
-		"/admin/apps/notes/users",
-		"/admin/apps/notes/db",
 	}
 
 	for _, path := range tests {
@@ -62,6 +77,75 @@ func TestWebPagesRender(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), "ohmesh") {
 			t.Fatalf("%s did not render the ohmesh shell", path)
 		}
+	}
+
+	adminTests := []string{
+		"/admin/apps",
+		"/admin/apps/notes",
+		"/admin/apps/notes/users",
+		"/admin/apps/notes/db",
+	}
+
+	for _, path := range adminTests {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: adminToken})
+		router.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s expected 200, got %d: %s", path, rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "ohmesh") {
+			t.Fatalf("%s did not render the ohmesh shell", path)
+		}
+	}
+}
+
+func TestAdminAppsAreScopedToLoggedInOwner(t *testing.T) {
+	router, db := newTestRouter(t)
+
+	owner := models.User{Email: "owner@example.com", Name: "Owner"}
+	other := models.User{Email: "other@example.com", Name: "Other"}
+	if err := db.Create(&owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	ownedApp := models.App{OwnerID: owner.ID, Slug: "owned", Name: "Owned", Status: models.AppStatusActive}
+	otherApp := models.App{OwnerID: other.ID, Slug: "other", Name: "Other", Status: models.AppStatusActive}
+	if err := db.Create(&ownedApp).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&otherApp).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	token := createTestSession(t, db, owner.ID, adminSessionAppID)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/admin/apps", nil)
+	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Owned") {
+		t.Fatalf("owned app was not shown: %s", body)
+	}
+	if strings.Contains(body, "Other") {
+		t.Fatalf("another owner's app was shown: %s", body)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/apps/other", nil)
+	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("other owner's app expected 404, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -154,4 +238,20 @@ func newTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	}
 
 	return New(db, cfg), db
+}
+
+func createTestSession(t *testing.T, db *gorm.DB, userID, appID uint) string {
+	t.Helper()
+
+	token := "test-session-token-" + strconv.FormatUint(uint64(userID), 10) + "-" + strconv.FormatUint(uint64(appID), 10)
+	session := models.Session{
+		UserID:    userID,
+		AppID:     appID,
+		TokenHash: hashToken(token),
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}
+	if err := db.Create(&session).Error; err != nil {
+		t.Fatal(err)
+	}
+	return token
 }

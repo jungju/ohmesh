@@ -3,64 +3,290 @@
 <div class="row">
   <div>
     <h1>앱 관리</h1>
-    <p class="muted">정적 프론트엔드 앱과 OAuth redirect 설정을 관리합니다.</p>
+    <p class="muted">로그인한 계정의 앱과 사용자, JSON 데이터를 관리합니다.</p>
   </div>
 </div>
 
-<div class="warning">현재 관리 페이지는 개발용입니다. 공개 배포 전에 관리자 인증을 추가하세요.</div>
 {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
 
+<div class="toolbar">
+  <form method="get" action="/admin/apps">
+    <label>
+      앱 선택
+      <select name="app" onchange="this.form.submit()">
+        {{if .Apps}}
+          {{range .Apps}}
+            <option value="{{.Slug}}" {{if eq $.SelectedSlug .Slug}}selected{{end}}>{{.Name}} ({{.Slug}})</option>
+          {{end}}
+        {{else}}
+          <option value="">등록된 앱이 없습니다</option>
+        {{end}}
+      </select>
+    </label>
+  </form>
+
+  <details class="add-app">
+    <summary class="button">앱 추가</summary>
+    <div class="panel section">
+      <h2>새 앱</h2>
+      <form method="post" action="/admin/apps" class="form-grid">
+        <label>
+          Slug
+          <input name="slug" placeholder="notes" required>
+        </label>
+        <label>
+          이름
+          <input name="name" placeholder="Notes" required>
+        </label>
+        <label class="wide">
+          기본 Redirect URL
+          <input name="default_redirect_url" placeholder="https://username.github.io/notes">
+        </label>
+        <label>
+          상태
+          <select name="status">
+            <option value="active">active</option>
+            <option value="disabled">disabled</option>
+          </select>
+        </label>
+        <div class="wide">
+          <button type="submit">앱 만들기</button>
+        </div>
+      </form>
+    </div>
+  </details>
+</div>
+
+{{with .SelectedApp}}
 <section class="two-col">
   <div class="panel">
-    <h2>앱 만들기</h2>
-    <form method="post" action="/admin/apps" class="form-grid">
+    <div class="row">
+      <div>
+        <h2>앱 설정</h2>
+        <p class="muted"><code>{{.Slug}}</code></p>
+      </div>
+    </div>
+    <form method="post" action="/admin/apps/{{.Slug}}" class="form-grid">
       <label>
         Slug
-        <input name="slug" placeholder="notes" required>
-      </label>
-      <label>
-        이름
-        <input name="name" placeholder="Notes" required>
-      </label>
-      <label class="wide">
-        기본 Redirect URL
-        <input name="default_redirect_url" placeholder="https://username.github.io/notes">
+        <input value="{{.Slug}}" disabled>
       </label>
       <label>
         상태
         <select name="status">
-          <option value="active">active</option>
-          <option value="disabled">disabled</option>
+          <option value="active" {{if eq .Status "active"}}selected{{end}}>active</option>
+          <option value="disabled" {{if eq .Status "disabled"}}selected{{end}}>disabled</option>
         </select>
       </label>
-      <div class="wide">
-        <button type="submit">앱 만들기</button>
+      <label class="wide">
+        이름
+        <input name="name" value="{{.Name}}" required>
+      </label>
+      <label class="wide">
+        기본 Redirect URL
+        <input name="default_redirect_url" value="{{.DefaultRedirectURL}}">
+      </label>
+      <div class="wide inline-actions">
+        <button type="submit">저장</button>
       </div>
     </form>
   </div>
 
   <div class="panel">
-    <h2>등록된 앱</h2>
-    {{if .Apps}}
+    <h2>도메인</h2>
+    <form method="post" action="/admin/apps/{{.Slug}}/domains" class="stack">
+      <label>
+        Domain URL
+        <input name="domain" placeholder="https://username.github.io/app" required>
+      </label>
+      <label style="display:flex; gap:8px; align-items:center;">
+        <input type="checkbox" name="is_primary" style="width:auto;">
+        Primary domain
+      </label>
+      <button type="submit">도메인 추가</button>
+    </form>
+
+    <div class="section">
+      {{if $.Domains}}
+        <table>
+          <thead><tr><th>Domain</th><th>Primary</th><th></th></tr></thead>
+          <tbody>
+          {{range $.Domains}}
+            <tr>
+              <td><code>{{.Domain}}</code></td>
+              <td>{{if .IsPrimary}}<span class="pill active">primary</span>{{else}}<span class="muted">-</span>{{end}}</td>
+              <td>
+                <form method="post" action="/admin/apps/{{$.SelectedApp.Slug}}/domains/{{.ID}}/delete">
+                  <button class="danger" type="submit">삭제</button>
+                </form>
+              </td>
+            </tr>
+          {{end}}
+          </tbody>
+        </table>
+      {{else}}
+        <div class="empty">등록된 도메인이 없습니다.</div>
+      {{end}}
+    </div>
+  </div>
+</section>
+
+<section class="plain-panel danger-zone section">
+  <div class="row">
+    <div>
+      <h2>앱 삭제</h2>
+      <p class="muted">앱, 도메인, 세션, JSON 레코드가 함께 삭제됩니다.</p>
+    </div>
+    <form method="post" action="/admin/apps/{{.Slug}}/delete">
+      <button class="danger" type="submit">앱 삭제</button>
+    </form>
+  </div>
+</section>
+
+<section id="users" class="section">
+  <div class="row">
+    <div>
+      <h2>사용자 관리</h2>
+      <p class="muted">이 앱에 세션 또는 레코드가 있는 사용자입니다.</p>
+    </div>
+  </div>
+
+  {{if $.Users}}
+    <table>
+      <thead>
+        <tr><th>사용자</th><th>세션</th><th>레코드</th><th>최근 세션</th><th>최근 레코드</th><th></th></tr>
+      </thead>
+      <tbody>
+      {{range $.Users}}
+        <tr>
+          <td>
+            <div style="display:flex; align-items:center; gap:10px;">
+              {{if .AvatarURL}}<img class="avatar" src="{{.AvatarURL}}" alt="">{{else}}<span class="avatar"></span>{{end}}
+              <div>
+                <strong>{{if .Name}}{{.Name}}{{else}}User {{.ID}}{{end}}</strong><br>
+                <span class="muted">{{.Email}}</span><br>
+                <code>#{{.ID}}</code>
+              </div>
+            </div>
+          </td>
+          <td>{{.SessionCount}}</td>
+          <td>{{.RecordCount}}</td>
+          <td>{{if .LastSessionAt}}{{.LastSessionAt}}{{else}}-{{end}}</td>
+          <td>{{if .LastRecordAt}}{{.LastRecordAt}}{{else}}-{{end}}</td>
+          <td>
+            <form method="post" action="/admin/apps/{{$.SelectedApp.Slug}}/users/{{.ID}}/sessions/delete">
+              <button class="danger" type="submit">세션 만료</button>
+            </form>
+          </td>
+        </tr>
+      {{end}}
+      </tbody>
+    </table>
+  {{else}}
+    <div class="empty">아직 이 앱을 사용한 사용자가 없습니다.</div>
+  {{end}}
+</section>
+
+<section id="records" class="section">
+  <div class="row">
+    <div>
+      <h2>CRUD 데이터 관리</h2>
+      <p class="muted">선택한 앱의 사용자별 JSON 레코드입니다.</p>
+    </div>
+  </div>
+
+  <section class="two-col">
+    <div class="panel">
+      <h3>필터</h3>
+      <form method="get" action="/admin/apps" class="form-grid">
+        <input type="hidden" name="app" value="{{.Slug}}">
+        <label>
+          Type
+          <input name="type" value="{{$.TypeFilter}}" placeholder="note">
+        </label>
+        <label>
+          User ID
+          <input name="user_id" value="{{$.UserIDFilter}}" placeholder="1">
+        </label>
+        <label>
+          Limit
+          <input name="limit" type="number" min="1" max="500" value="{{$.Limit}}">
+        </label>
+        <div style="align-self:end;">
+          <button type="submit">필터 적용</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h3>레코드 만들기</h3>
+      {{if $.RecordUsers}}
+        <form method="post" action="/admin/apps/{{.Slug}}/db/records" class="form-grid">
+          <label>
+            User
+            <select name="user_id" required>
+              <option value="">사용자 선택</option>
+              {{range $.RecordUsers}}
+                <option value="{{.ID}}">{{if .Email}}{{.Email}}{{else}}User {{.ID}}{{end}} (#{{.ID}})</option>
+              {{end}}
+            </select>
+          </label>
+          <label>
+            Type
+            <input name="type" placeholder="note" required>
+          </label>
+          <label class="wide">
+            Data JSON
+            <textarea name="data" required>{"title":"Hello"}</textarea>
+          </label>
+          <div class="wide">
+            <button type="submit">레코드 만들기</button>
+          </div>
+        </form>
+      {{else}}
+        <div class="empty">레코드를 만들 수 있는 사용자가 아직 없습니다.</div>
+      {{end}}
+    </div>
+  </section>
+
+  <div class="section">
+    {{if $.Records}}
       <table>
         <thead>
-          <tr><th>앱</th><th>상태</th><th>도메인</th><th></th></tr>
+          <tr><th>ID</th><th>User</th><th>레코드</th><th>Updated</th><th></th></tr>
         </thead>
         <tbody>
-        {{range .Apps}}
+        {{range $.Records}}
           <tr>
-            <td><strong>{{.Name}}</strong><br><code>{{.Slug}}</code></td>
-            <td><span class="pill {{.Status}}">{{.Status}}</span></td>
-            <td>{{len .Domains}}</td>
-            <td><a class="button secondary" href="/admin/apps/{{.Slug}}">관리</a></td>
+            <td><code>#{{.ID}}</code></td>
+            <td>
+              <strong>{{if .User.Email}}{{.User.Email}}{{else}}User {{.UserID}}{{end}}</strong><br>
+              <code>{{.UserID}}</code>
+            </td>
+            <td>
+              <form method="post" action="/admin/apps/{{$.SelectedApp.Slug}}/db/records/{{.ID}}" class="table-form">
+                <input name="type" value="{{.Type}}" required>
+                <textarea name="data" required>{{jsonText .Data}}</textarea>
+                <button type="submit">저장</button>
+              </form>
+            </td>
+            <td>{{formatTime .UpdatedAt}}</td>
+            <td>
+              <form method="post" action="/admin/apps/{{$.SelectedApp.Slug}}/db/records/{{.ID}}/delete">
+                <button class="danger" type="submit">삭제</button>
+              </form>
+            </td>
           </tr>
         {{end}}
         </tbody>
       </table>
     {{else}}
-      <div class="empty">아직 등록된 앱이 없습니다.</div>
+      <div class="empty">조건에 맞는 레코드가 없습니다.</div>
     {{end}}
   </div>
 </section>
+{{else}}
+  <div class="empty">앱을 추가하면 이곳에서 설정, 사용자, JSON 데이터를 관리할 수 있습니다.</div>
+{{end}}
 {{template "shell_end" .}}
 {{end}}

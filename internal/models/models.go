@@ -92,6 +92,8 @@ type Identity struct {
 
 type App struct {
 	ID                 uint        `gorm:"primaryKey" json:"id"`
+	OwnerID            uint        `gorm:"not null;default:0;index" json:"owner_id"`
+	Owner              User        `json:"-"`
 	Slug               string      `gorm:"not null;size:80;uniqueIndex" json:"slug"`
 	Name               string      `gorm:"not null;size:160" json:"name"`
 	DefaultRedirectURL string      `json:"default_redirect_url"`

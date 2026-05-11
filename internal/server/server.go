@@ -32,6 +32,13 @@ type authedContext struct {
 	Session models.Session
 }
 
+type adminContext struct {
+	User    models.User
+	Session models.Session
+}
+
+const adminSessionAppID uint = 0
+
 func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 	s := &Server{db: db, cfg: cfg}
 
@@ -56,6 +63,7 @@ func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 	api.GET("/apps", s.listApps)
 	api.GET("/apps/:slug", s.getApp)
 	api.PATCH("/apps/:slug", s.updateApp)
+	api.DELETE("/apps/:slug", s.deleteApp)
 	api.POST("/apps/:slug/domains", s.createAppDomain)
 	api.GET("/apps/:slug/domains", s.listAppDomains)
 	api.DELETE("/apps/:slug/domains/:id", s.deleteAppDomain)
@@ -67,16 +75,19 @@ func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 	api.DELETE("/apps/:slug/records/:id", s.deleteRecord)
 
 	admin := router.Group("/admin")
+	admin.Use(s.requireWebAdmin())
 	admin.GET("/apps", s.webListApps)
 	admin.POST("/apps", s.webCreateApp)
 	admin.GET("/apps/:slug", s.webAppDetail)
 	admin.POST("/apps/:slug", s.webUpdateApp)
+	admin.POST("/apps/:slug/delete", s.webDeleteApp)
 	admin.POST("/apps/:slug/domains", s.webCreateAppDomain)
 	admin.POST("/apps/:slug/domains/:id/delete", s.webDeleteAppDomain)
 	admin.GET("/apps/:slug/users", s.webAppUsers)
 	admin.POST("/apps/:slug/users/:id/sessions/delete", s.webExpireAppUserSessions)
 	admin.GET("/apps/:slug/db", s.webAppDB)
 	admin.POST("/apps/:slug/db/records", s.webCreateAppRecord)
+	admin.POST("/apps/:slug/db/records/:id", s.webUpdateAppRecord)
 	admin.POST("/apps/:slug/db/records/:id/delete", s.webDeleteAppRecord)
 
 	return router
@@ -153,20 +164,53 @@ func (s *Server) requireAppSession(c *gin.Context) (authedContext, bool) {
 }
 
 func (s *Server) sessionFromRequest(c *gin.Context) (models.Session, models.User, bool) {
+	session, user, ok := s.sessionFromCookie(c)
+	if !ok {
+		respondError(c, http.StatusUnauthorized, "login required")
+		return models.Session{}, models.User{}, false
+	}
+
+	return session, user, true
+}
+
+func (s *Server) sessionFromCookie(c *gin.Context) (models.Session, models.User, bool) {
 	token, err := c.Cookie(s.cfg.SessionCookieName)
 	if err != nil || token == "" {
-		respondError(c, http.StatusUnauthorized, "login required")
 		return models.Session{}, models.User{}, false
 	}
 
 	var session models.Session
 	err = s.db.Preload("User").Where("token_hash = ? AND expires_at > ?", hashToken(token), time.Now().UTC()).First(&session).Error
 	if err != nil {
-		respondDBError(c, err, "login required")
 		return models.Session{}, models.User{}, false
 	}
 
 	return session, session.User, true
+}
+
+func (s *Server) requireAdminSession(c *gin.Context) (adminContext, bool) {
+	session, user, ok := s.sessionFromCookie(c)
+	if !ok || session.AppID != adminSessionAppID {
+		respondError(c, http.StatusUnauthorized, "ohmesh login required")
+		return adminContext{}, false
+	}
+
+	return adminContext{User: user, Session: session}, true
+}
+
+func (s *Server) requireWebAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session, user, ok := s.sessionFromCookie(c)
+		if !ok || session.AppID != adminSessionAppID {
+			redirectToLogin(c)
+			c.Abort()
+			return
+		}
+
+		c.Set("adminUser", user)
+		c.Set("adminSession", session)
+		c.Next()
+	}
 }
 
 func (s *Server) createSession(c *gin.Context, userID, appID uint) error {
@@ -344,6 +388,67 @@ func appendQuery(rawURL, key, value string) string {
 	query := parsed.Query()
 	query.Set(key, value)
 	parsed.RawQuery = query.Encode()
+	return parsed.String()
+}
+
+func redirectToLogin(c *gin.Context) {
+	values := url.Values{}
+	values.Set("next", safeAdminPath(c.Request.URL.RequestURI()))
+	c.Redirect(http.StatusSeeOther, "/login?"+values.Encode())
+}
+
+func safeAdminPath(raw string) string {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.IsAbs() || parsed.Host != "" {
+		return "/admin/apps"
+	}
+
+	path := parsed.Path
+	if path == "" {
+		path = "/admin/apps"
+	}
+	if path != "/admin" && !strings.HasPrefix(path, "/admin/") {
+		return "/admin/apps"
+	}
+
+	parsed.Scheme = ""
+	parsed.Host = ""
+	parsed.User = nil
+	parsed.Fragment = ""
+	return parsed.RequestURI()
+}
+
+func absoluteAdminURL(c *gin.Context, rawPath string) string {
+	return callbackURL(c, safeAdminPath(rawPath))
+}
+
+func adminRedirectAllowed(c *gin.Context, raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return false
+	}
+
+	current, err := url.Parse(callbackURL(c, "/"))
+	if err != nil {
+		return false
+	}
+	if parsed.Scheme != current.Scheme || !strings.EqualFold(parsed.Host, current.Host) {
+		return false
+	}
+
+	path := parsed.Path
+	if path == "" {
+		path = "/"
+	}
+	return path == "/admin" || strings.HasPrefix(path, "/admin/")
+}
+
+func stripURLFragment(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	parsed.Fragment = ""
 	return parsed.String()
 }
 

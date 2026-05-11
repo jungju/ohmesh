@@ -1,5 +1,5 @@
 .env
-ohmesh
+/ohmesh
 bin/
 tmp/
 *.db

@@ -66,6 +66,12 @@ Then open:
 http://localhost:8080
 ```
 
+The Kubernetes ingress host is:
+
+```text
+https://ohmesh.okgo.click
+```
+
 The raw kubectl equivalent is:
 
 ```sh

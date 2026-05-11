@@ -10,6 +10,6 @@ data:
   OHMESH_ENV: "production"
   OHMESH_SESSION_COOKIE: "ohmesh_session"
   OHMESH_SESSION_TTL: "720h"
-  OHMESH_COOKIE_SECURE: "false"
-  OHMESH_ALLOWED_ORIGINS: "http://ohmesh.localhost,http://localhost:8080"
+  OHMESH_COOKIE_SECURE: "true"
+  OHMESH_ALLOWED_ORIGINS: "https://ohmesh.okgo.click,http://localhost:8080"
   OHMESH_SESSION_SECRET: "local-dev-secret-change-me"

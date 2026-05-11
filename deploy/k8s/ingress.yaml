@@ -4,10 +4,16 @@ metadata:
   name: ohmesh
   labels:
     app.kubernetes.io/name: ohmesh
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
 spec:
   ingressClassName: nginx
+  tls:
+    - hosts:
+        - ohmesh.okgo.click
+      secretName: ohmesh-tls
   rules:
-    - host: ohmesh.localhost
+    - host: ohmesh.okgo.click
       http:
         paths:
           - path: /

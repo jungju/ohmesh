@@ -37,11 +37,10 @@ Then open:
 http://localhost:8080
 ```
 
-If your local ingress controller supports `*.localhost`, the included ingress is
-available at:
+The included ingress is configured for:
 
 ```text
-http://ohmesh.localhost
+https://ohmesh.okgo.click
 ```
 
 OAuth provider credentials are optional for the pod to start. To enable real

@@ -5,8 +5,13 @@
     <h1>Static apps, one small backend.</h1>
     <p class="lede">ohmesh는 GitHub Pages나 별도 도메인에 배포된 여러 정적 프론트엔드 앱이 공유하는 가벼운 API 플랫폼입니다.</p>
     <div class="actions">
-      <a class="button" href="/admin/apps">앱 관리 열기</a>
-      <a class="button secondary" href="/login">로그인 페이지 보기</a>
+      {{if .IsLoggedIn}}
+        <a class="button" href="/dashboard">대시보드 열기</a>
+        <a class="button secondary" href="/admin/apps">앱 관리</a>
+      {{else}}
+        <a class="button" href="/login">로그인</a>
+        <a class="button secondary" href="/admin/apps">앱 관리</a>
+      {{end}}
     </div>
   </div>
   <div class="panel map" aria-label="ohmesh architecture preview">
@@ -26,34 +31,14 @@
   </div>
 </section>
 
-<section class="grid" aria-label="Current counts">
-  <div class="metric"><strong>{{.AppCount}}</strong><span class="muted">registered apps</span></div>
-  <div class="metric"><strong>{{.UserCount}}</strong><span class="muted">users</span></div>
-  <div class="metric"><strong>{{.RecordCount}}</strong><span class="muted">app records</span></div>
-</section>
-
-<section style="margin-top: 28px;" class="two-col">
+<section class="two-col">
   <div class="plain-panel">
     <h2>v1 범위</h2>
     <p>Go, Gin, GORM, SQLite로 구성된 단일 API 서버입니다. 조직, 멤버십, 마이크로서비스 없이 개인 사용자 데이터 격리에 집중합니다.</p>
   </div>
   <div class="plain-panel">
-    <h2>최근 앱</h2>
-    {{if .Apps}}
-      <div class="stack">
-      {{range .Apps}}
-        <div class="row">
-          <div>
-            <strong>{{.Name}}</strong><br>
-            <span class="muted"><code>{{.Slug}}</code> · {{len .Domains}} domains</span>
-          </div>
-          <a class="button secondary" href="/admin/apps/{{.Slug}}">관리</a>
-        </div>
-      {{end}}
-      </div>
-    {{else}}
-      <div class="empty">아직 등록된 앱이 없습니다.</div>
-    {{end}}
+    <h2>앱을 위한 공통 기능</h2>
+    <p>정적 프론트엔드 앱마다 반복해서 필요한 OAuth 로그인, 쿠키 세션, 허용 도메인, 사용자별 JSON CRUD를 한 서비스에서 제공합니다.</p>
   </div>
 </section>
 {{template "shell_end" .}}

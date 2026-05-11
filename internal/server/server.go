@@ -48,6 +48,8 @@ func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 
 	router.GET("/", s.homePage)
 	router.GET("/login", s.loginPage)
+	router.GET("/dashboard", s.requireWebAdmin(), s.dashboardPage)
+	router.POST("/logout", s.webLogout)
 	router.GET("/healthz", s.health)
 
 	auth := router.Group("/auth")
@@ -189,28 +191,36 @@ func (s *Server) sessionFromCookie(c *gin.Context) (models.Session, models.User,
 }
 
 func (s *Server) requireAdminSession(c *gin.Context) (adminContext, bool) {
-	session, user, ok := s.sessionFromCookie(c)
-	if !ok || session.AppID != adminSessionAppID {
+	admin, ok := s.adminSessionFromCookie(c)
+	if !ok {
 		respondError(c, http.StatusUnauthorized, "ohmesh login required")
 		return adminContext{}, false
 	}
 
-	return adminContext{User: user, Session: session}, true
+	return admin, true
 }
 
 func (s *Server) requireWebAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		session, user, ok := s.sessionFromCookie(c)
-		if !ok || session.AppID != adminSessionAppID {
+		admin, ok := s.adminSessionFromCookie(c)
+		if !ok {
 			redirectToLogin(c)
 			c.Abort()
 			return
 		}
 
-		c.Set("adminUser", user)
-		c.Set("adminSession", session)
+		c.Set("adminUser", admin.User)
+		c.Set("adminSession", admin.Session)
 		c.Next()
 	}
+}
+
+func (s *Server) adminSessionFromCookie(c *gin.Context) (adminContext, bool) {
+	session, user, ok := s.sessionFromCookie(c)
+	if !ok || session.AppID != adminSessionAppID {
+		return adminContext{}, false
+	}
+	return adminContext{User: user, Session: session}, true
 }
 
 func (s *Server) createSession(c *gin.Context, userID, appID uint) error {
@@ -400,15 +410,16 @@ func redirectToLogin(c *gin.Context) {
 func safeAdminPath(raw string) string {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
 	if err != nil || parsed.IsAbs() || parsed.Host != "" {
-		return "/admin/apps"
+		return "/dashboard"
 	}
 
 	path := parsed.Path
 	if path == "" {
-		path = "/admin/apps"
+		parsed.Path = "/dashboard"
+		path = parsed.Path
 	}
-	if path != "/admin" && !strings.HasPrefix(path, "/admin/") {
-		return "/admin/apps"
+	if path != "/dashboard" && path != "/admin" && !strings.HasPrefix(path, "/admin/") {
+		return "/dashboard"
 	}
 
 	parsed.Scheme = ""
@@ -440,7 +451,7 @@ func adminRedirectAllowed(c *gin.Context, raw string) bool {
 	if path == "" {
 		path = "/"
 	}
-	return path == "/admin" || strings.HasPrefix(path, "/admin/")
+	return path == "/dashboard" || path == "/admin" || strings.HasPrefix(path, "/admin/")
 }
 
 func stripURLFragment(raw string) string {

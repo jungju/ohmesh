@@ -1,0 +1,61 @@
+{{define "dashboard.tmpl"}}
+{{template "shell_start" .}}
+<div class="row">
+  <div>
+    <h1>대시보드</h1>
+    <p class="muted">내 ohmesh 앱의 운영 상태를 봅니다.</p>
+  </div>
+  <a class="button" href="/admin/apps">앱 관리</a>
+</div>
+
+<section class="grid" aria-label="Dashboard counts">
+  <div class="metric"><strong>{{.AppCount}}</strong><span class="muted">내 앱</span></div>
+  <div class="metric"><strong>{{.ActiveAppCount}}</strong><span class="muted">활성 앱</span></div>
+  <div class="metric"><strong>{{.UserCount}}</strong><span class="muted">사용자</span></div>
+</section>
+
+<section class="section">
+  <div class="metric"><strong>{{.RecordCount}}</strong><span class="muted">JSON 레코드</span></div>
+</section>
+
+<section class="two-col section">
+  <div class="plain-panel">
+    <h2>최근 앱</h2>
+    {{if .Apps}}
+      <div class="stack">
+      {{range .Apps}}
+        <div class="row">
+          <div>
+            <strong>{{.Name}}</strong><br>
+            <span class="muted"><code>{{.Slug}}</code> · {{len .Domains}} domains</span>
+          </div>
+          <a class="button secondary" href="/admin/apps?app={{.Slug}}">관리</a>
+        </div>
+      {{end}}
+      </div>
+    {{else}}
+      <div class="empty">아직 등록된 앱이 없습니다.</div>
+    {{end}}
+  </div>
+
+  <div class="plain-panel">
+    <h2>최근 레코드</h2>
+    {{if .Records}}
+      <div class="stack">
+      {{range .Records}}
+        <div class="row">
+          <div>
+            <strong>{{.Type}}</strong><br>
+            <span class="muted">{{if .User.Email}}{{.User.Email}}{{else}}User {{.UserID}}{{end}} · {{formatTime .UpdatedAt}}</span>
+          </div>
+          <code>#{{.ID}}</code>
+        </div>
+      {{end}}
+      </div>
+    {{else}}
+      <div class="empty">아직 저장된 레코드가 없습니다.</div>
+    {{end}}
+  </div>
+</section>
+{{template "shell_end" .}}
+{{end}}

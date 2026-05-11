@@ -199,6 +199,8 @@ Login behavior:
 ```http
 GET /
 GET /login
+GET /dashboard
+POST /logout
 GET /admin/apps
 GET /admin/apps/:slug
 GET /admin/apps/:slug/users

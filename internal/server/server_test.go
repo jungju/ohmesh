@@ -61,6 +61,13 @@ func TestWebPagesRender(t *testing.T) {
 		t.Fatalf("expected redirect to login, got %q", location)
 	}
 
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("dashboard without login expected 303, got %d: %s", rec.Code, rec.Body.String())
+	}
+
 	tests := []string{
 		"/",
 		"/login?app=notes&redirect_url=https://example.com/notes",
@@ -80,6 +87,7 @@ func TestWebPagesRender(t *testing.T) {
 	}
 
 	adminTests := []string{
+		"/dashboard",
 		"/admin/apps",
 		"/admin/apps/notes",
 		"/admin/apps/notes/users",
@@ -98,6 +106,84 @@ func TestWebPagesRender(t *testing.T) {
 		if !strings.Contains(rec.Body.String(), "ohmesh") {
 			t.Fatalf("%s did not render the ohmesh shell", path)
 		}
+	}
+}
+
+func TestNavigationReflectsLoginState(t *testing.T) {
+	router, db := newTestRouter(t)
+
+	user := models.User{Email: "admin@example.com", Name: "Admin"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	token := createTestSession(t, db, user.ID, adminSessionAppID)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/login"`) {
+		t.Fatalf("logged-out nav should include login: %s", body)
+	}
+	if strings.Contains(body, `aria-label="로그아웃"`) {
+		t.Fatalf("logged-out nav should not include logout: %s", body)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body = rec.Body.String()
+	if strings.Contains(body, `href="/login"`) {
+		t.Fatalf("logged-in nav should hide login: %s", body)
+	}
+	if !strings.Contains(body, `href="/dashboard"`) {
+		t.Fatalf("logged-in nav should include dashboard: %s", body)
+	}
+	if !strings.Contains(body, `aria-label="로그아웃"`) {
+		t.Fatalf("logged-in nav should include icon logout: %s", body)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/login", nil)
+	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("logged-in login page expected 303, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if location := rec.Header().Get("Location"); location != "/dashboard" {
+		t.Fatalf("logged-in login page should redirect to dashboard, got %q", location)
+	}
+}
+
+func TestWebLogoutClearsSession(t *testing.T) {
+	router, db := newTestRouter(t)
+
+	user := models.User{Email: "admin@example.com", Name: "Admin"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	token := createTestSession(t, db, user.ID, adminSessionAppID)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/logout", nil)
+	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("expected 303, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var count int64
+	db.Model(&models.Session{}).Where("token_hash = ?", hashToken(token)).Count(&count)
+	if count != 0 {
+		t.Fatalf("expected logout to delete session, found %d", count)
 	}
 }
 

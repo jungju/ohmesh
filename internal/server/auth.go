@@ -361,7 +361,7 @@ func (s *Server) oauthStartState(c *gin.Context) (oauthState, bool) {
 	if c.Query("admin") == "1" {
 		redirectURL := strings.TrimSpace(c.Query("redirect_url"))
 		if redirectURL == "" {
-			redirectURL = absoluteAdminURL(c, "/admin/apps")
+			redirectURL = absoluteAdminURL(c, "/dashboard")
 		}
 		if !adminRedirectAllowed(c, redirectURL) {
 			respondError(c, http.StatusBadRequest, "invalid admin redirect_url")

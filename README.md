@@ -112,6 +112,8 @@ http://localhost:8080/auth/google/callback
 
 - `GET /`
 - `GET /login`
+- `GET /dashboard`
+- `POST /logout`
 - `GET /admin/apps`
 - `GET /admin/apps/:slug`
 - `GET /admin/apps/:slug/users`

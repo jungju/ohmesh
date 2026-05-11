@@ -85,6 +85,25 @@
       background: var(--surface-strong);
       text-decoration: none;
     }
+    .nav-logout { display: inline-flex; margin-left: 6px; }
+    .icon-button {
+      width: 40px;
+      min-height: 40px;
+      padding: 0;
+      border-color: var(--line);
+      background: white;
+      color: var(--muted);
+    }
+    .icon-button:hover {
+      color: var(--danger);
+      border-color: #efb4ad;
+      background: #fffafa;
+    }
+    .icon-button svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+    }
     main {
       max-width: 1180px;
       margin: 0 auto;
@@ -378,8 +397,23 @@
       <a class="brand" href="/"><span class="mark">o</span><span>ohmesh</span></a>
       <div class="navlinks">
         <a href="/" {{if eq .CurrentPath "/"}}class="active"{{end}}>소개</a>
-        <a href="/login" {{if eq .CurrentPath "/login"}}class="active"{{end}}>로그인</a>
+        {{if .IsLoggedIn}}
+          <a href="/dashboard" {{if .DashboardNavActive}}class="active"{{end}}>대시보드</a>
+        {{else}}
+          <a href="/login" {{if eq .CurrentPath "/login"}}class="active"{{end}}>로그인</a>
+        {{end}}
         <a href="/admin/apps" {{if .AdminNavActive}}class="active"{{end}}>앱 관리</a>
+        {{if .IsLoggedIn}}
+          <form class="nav-logout" method="post" action="/logout">
+            <button class="icon-button" type="submit" aria-label="로그아웃" title="로그아웃">
+              <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <path d="M16 17l5-5-5-5"></path>
+                <path d="M21 12H9"></path>
+              </svg>
+            </button>
+          </form>
+        {{end}}
       </div>
     </nav>
   </header>

@@ -69,11 +69,18 @@ func (s *Server) render(c *gin.Context, status int, name string, data gin.H) {
 	if _, ok := data["AdminNavActive"]; !ok {
 		data["AdminNavActive"] = c.Request.URL.Path == "/admin" || strings.HasPrefix(c.Request.URL.Path, "/admin/")
 	}
+	if _, ok := data["DashboardNavActive"]; !ok {
+		data["DashboardNavActive"] = c.Request.URL.Path == "/dashboard"
+	}
 	if _, ok := data["AdminUser"]; !ok {
 		if value, exists := c.Get("adminUser"); exists {
 			data["AdminUser"] = value
+		} else if admin, ok := s.adminSessionFromCookie(c); ok {
+			data["AdminUser"] = admin.User
 		}
 	}
+	_, loggedIn := data["AdminUser"]
+	data["IsLoggedIn"] = loggedIn
 	if _, ok := data["Notice"]; !ok {
 		data["Notice"] = c.Query("notice")
 	}
@@ -88,22 +95,8 @@ func (s *Server) renderErrorPage(c *gin.Context, status int, title, message stri
 }
 
 func (s *Server) homePage(c *gin.Context) {
-	var appCount int64
-	var userCount int64
-	var recordCount int64
-	s.db.Model(&models.App{}).Count(&appCount)
-	s.db.Model(&models.User{}).Count(&userCount)
-	s.db.Model(&models.AppRecord{}).Count(&recordCount)
-
-	var apps []models.App
-	s.db.Preload("Domains").Order("created_at DESC").Limit(6).Find(&apps)
-
 	s.render(c, http.StatusOK, "home.tmpl", gin.H{
-		"Title":       "ohmesh",
-		"AppCount":    appCount,
-		"UserCount":   userCount,
-		"RecordCount": recordCount,
-		"Apps":        apps,
+		"Title": "ohmesh",
 	})
 }
 
@@ -135,6 +128,65 @@ func (s *Server) loginPage(c *gin.Context) {
 		"Providers": providers,
 		"Next":      next,
 	})
+}
+
+func (s *Server) dashboardPage(c *gin.Context) {
+	adminUser := adminUserFromContext(c)
+
+	var appCount int64
+	var activeAppCount int64
+	var userCount int64
+	var recordCount int64
+	s.db.Model(&models.App{}).Where("owner_id = ?", adminUser.ID).Count(&appCount)
+	s.db.Model(&models.App{}).Where("owner_id = ? AND status = ?", adminUser.ID, models.AppStatusActive).Count(&activeAppCount)
+	s.db.Model(&models.AppRecord{}).
+		Joins("JOIN apps ON apps.id = app_records.app_id").
+		Where("apps.owner_id = ?", adminUser.ID).
+		Count(&recordCount)
+	s.db.Raw(`
+		SELECT COUNT(*) FROM (
+			SELECT sessions.user_id
+			FROM sessions
+			JOIN apps ON apps.id = sessions.app_id
+			WHERE apps.owner_id = ?
+			UNION
+			SELECT app_records.user_id
+			FROM app_records
+			JOIN apps ON apps.id = app_records.app_id
+			WHERE apps.owner_id = ?
+		) AS app_users
+	`, adminUser.ID, adminUser.ID).Scan(&userCount)
+
+	var apps []models.App
+	s.db.Preload("Domains").Where("owner_id = ?", adminUser.ID).Order("updated_at DESC").Limit(6).Find(&apps)
+
+	var records []models.AppRecord
+	s.db.Preload("User").
+		Joins("JOIN apps ON apps.id = app_records.app_id").
+		Where("apps.owner_id = ?", adminUser.ID).
+		Order("app_records.updated_at DESC").
+		Limit(6).
+		Find(&records)
+
+	s.render(c, http.StatusOK, "dashboard.tmpl", gin.H{
+		"Title":          "Dashboard",
+		"AppCount":       appCount,
+		"ActiveAppCount": activeAppCount,
+		"UserCount":      userCount,
+		"RecordCount":    recordCount,
+		"Apps":           apps,
+		"Records":        records,
+	})
+}
+
+func (s *Server) webLogout(c *gin.Context) {
+	token, err := c.Cookie(s.cfg.SessionCookieName)
+	if err == nil && token != "" {
+		s.db.Where("token_hash = ?", hashToken(token)).Delete(&models.Session{})
+	}
+
+	s.clearSessionCookie(c)
+	redirectWithNotice(c, "/", "로그아웃했습니다.")
 }
 
 func (s *Server) webListApps(c *gin.Context) {

@@ -25,37 +25,51 @@
     </label>
   </form>
 
-  <details class="add-app">
-    <summary class="button">앱 추가</summary>
-    <div class="panel section">
-      <h2>새 앱</h2>
-      <form method="post" action="/admin/apps" class="form-grid">
-        <label>
-          Slug
-          <input name="slug" placeholder="notes" required>
-        </label>
-        <label>
-          이름
-          <input name="name" placeholder="Notes" required>
-        </label>
-        <label class="wide">
-          기본 Redirect URL
-          <input name="default_redirect_url" placeholder="https://username.github.io/notes">
-        </label>
-        <label>
-          상태
-          <select name="status">
-            <option value="active">active</option>
-            <option value="disabled">disabled</option>
-          </select>
-        </label>
-        <div class="wide">
-          <button type="submit">앱 만들기</button>
-        </div>
-      </form>
-    </div>
-  </details>
+  <button type="button" data-dialog-open="add-app-dialog">앱 추가</button>
 </div>
+
+<dialog id="add-app-dialog" class="modal-dialog" aria-labelledby="add-app-title">
+  <div class="modal-header">
+    <div>
+      <h2 id="add-app-title">새 앱</h2>
+      <p class="muted">앱 전용 ID와 로그인 후 돌아갈 URL을 등록합니다.</p>
+    </div>
+    <form method="dialog">
+      <button class="icon-button" type="submit" aria-label="닫기" title="닫기">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 6 6 18"></path>
+          <path d="m6 6 12 12"></path>
+        </svg>
+      </button>
+    </form>
+  </div>
+
+  <form method="post" action="/admin/apps" class="form-grid modal-form">
+    <label>
+      Slug
+      <input name="slug" placeholder="notes" required>
+    </label>
+    <label>
+      이름
+      <input name="name" placeholder="Notes" required>
+    </label>
+    <label class="wide">
+      기본 Redirect URL
+      <input name="default_redirect_url" placeholder="https://username.github.io/notes">
+    </label>
+    <label>
+      상태
+      <select name="status">
+        <option value="active">active</option>
+        <option value="disabled">disabled</option>
+      </select>
+    </label>
+    <div class="wide inline-actions modal-actions">
+      <button type="submit">앱 만들기</button>
+      <button class="secondary" type="button" data-dialog-close="add-app-dialog">취소</button>
+    </div>
+  </form>
+</dialog>
 
 {{with .SelectedApp}}
 <section class="two-col">
@@ -288,5 +302,23 @@
 {{else}}
   <div class="empty">앱을 추가하면 이곳에서 설정, 사용자, JSON 데이터를 관리할 수 있습니다.</div>
 {{end}}
+<script>
+  (() => {
+    const dialog = document.getElementById("add-app-dialog");
+    if (!dialog) return;
+
+    document.querySelectorAll("[data-dialog-open='add-app-dialog']").forEach((button) => {
+      button.addEventListener("click", () => dialog.showModal());
+    });
+
+    document.querySelectorAll("[data-dialog-close='add-app-dialog']").forEach((button) => {
+      button.addEventListener("click", () => dialog.close());
+    });
+
+    dialog.addEventListener("click", (event) => {
+      if (event.target === dialog) dialog.close();
+    });
+  })();
+</script>
 {{template "shell_end" .}}
 {{end}}

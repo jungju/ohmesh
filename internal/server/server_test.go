@@ -107,6 +107,21 @@ func TestWebPagesRender(t *testing.T) {
 			t.Fatalf("%s did not render the ohmesh shell", path)
 		}
 	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/admin/apps", nil)
+	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: adminToken})
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin apps expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `<dialog id="add-app-dialog"`) {
+		t.Fatalf("admin apps should render add app modal: %s", body)
+	}
+	if strings.Contains(body, `<details class="add-app"`) {
+		t.Fatalf("admin apps should not render add app disclosure: %s", body)
+	}
 }
 
 func TestNavigationReflectsLoginState(t *testing.T) {

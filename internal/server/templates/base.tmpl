@@ -308,11 +308,34 @@
       border-bottom: 1px solid var(--line);
       padding: 18px 0;
     }
-    details.add-app > summary {
-      list-style: none;
-      width: max-content;
+    .modal-dialog {
+      width: min(680px, calc(100vw - 32px));
+      max-height: calc(100dvh - 32px);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 24px 70px rgba(23, 32, 42, 0.22);
+      padding: 0;
+      color: var(--text);
+      overflow: auto;
     }
-    details.add-app > summary::-webkit-details-marker { display: none; }
+    .modal-dialog::backdrop {
+      background: rgba(23, 32, 42, 0.36);
+      backdrop-filter: blur(2px);
+    }
+    .modal-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 22px 22px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .modal-header h2 { margin-bottom: 6px; }
+    .modal-form { padding: 22px; }
+    .modal-actions {
+      justify-content: flex-end;
+      margin-top: 4px;
+    }
     .danger-zone {
       border-color: #efb4ad;
       background: #fffafa;

@@ -168,6 +168,68 @@ func TestNavigationReflectsLoginState(t *testing.T) {
 	}
 }
 
+func TestAppLoginPageUsesAppOAuthFlow(t *testing.T) {
+	router, db := newTestRouter(t)
+
+	owner := models.User{Email: "owner@example.com", Name: "Owner"}
+	if err := db.Create(&owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	app := models.App{
+		OwnerID:            owner.ID,
+		Slug:               "notes",
+		Name:               "Notes",
+		DefaultRedirectURL: "https://example.com/notes",
+		Status:             models.AppStatusActive,
+	}
+	if err := db.Create(&app).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/login?app=notes&redirect_url=https://example.com/notes/dashboard", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Notes 로그인") {
+		t.Fatalf("app login page should show app name: %s", body)
+	}
+	if !strings.Contains(body, "앱 전용 ID") || !strings.Contains(body, "notes") {
+		t.Fatalf("app login page should show app id: %s", body)
+	}
+	if !strings.Contains(body, `/auth/github/login?app=notes&amp;redirect_url=https%3A%2F%2Fexample.com%2Fnotes%2Fdashboard`) {
+		t.Fatalf("app login page should link GitHub app OAuth flow: %s", body)
+	}
+	if strings.Contains(body, "admin=1") {
+		t.Fatalf("app login page should not use admin OAuth flow: %s", body)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/login?app=notes&redirect_url=https://evil.example/dashboard", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unregistered redirect expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	user := models.User{Email: "user@example.com", Name: "User"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	token := createTestSession(t, db, user.ID, app.ID)
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/login?app=notes&redirect_url=https://example.com/notes", nil)
+	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("existing app session expected 303, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if location := rec.Header().Get("Location"); location != "https://example.com/notes?ohmesh_login=success" {
+		t.Fatalf("existing app session should return to app, got %q", location)
+	}
+}
+
 func TestWebLogoutClearsSession(t *testing.T) {
 	router, db := newTestRouter(t)
 
@@ -322,11 +384,15 @@ func newTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 	}
 
 	cfg := config.Config{
-		Addr:              ":0",
-		DatabasePath:      ":memory:",
-		SessionSecret:     "test-secret",
-		SessionCookieName: "ohmesh_session",
-		SessionTTL:        time.Hour,
+		Addr:               ":0",
+		DatabasePath:       ":memory:",
+		SessionSecret:      "test-secret",
+		SessionCookieName:  "ohmesh_session",
+		SessionTTL:         time.Hour,
+		GitHubClientID:     "github-client",
+		GitHubClientSecret: "github-secret",
+		GoogleClientID:     "google-client",
+		GoogleClientSecret: "google-secret",
 	}
 
 	return New(db, cfg), db

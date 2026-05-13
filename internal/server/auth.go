@@ -86,6 +86,15 @@ type oauthProfile struct {
 	RefreshToken   string
 }
 
+type oauthStartError struct {
+	status  int
+	message string
+}
+
+func (e oauthStartError) Error() string {
+	return e.message
+}
+
 func (s *Server) githubLogin(c *gin.Context) {
 	if s.cfg.GitHubClientID == "" || s.cfg.GitHubClientSecret == "" {
 		respondError(c, http.StatusServiceUnavailable, "GitHub OAuth is not configured")
@@ -329,32 +338,50 @@ func (s *Server) redirectAllowed(app models.App, redirectURL string) bool {
 }
 
 func (s *Server) oauthStartParams(c *gin.Context) (models.App, string, bool) {
-	app, err := s.loadActiveApp(c.Query("app"))
+	app, redirectURL, err := s.resolveOAuthStartParams(c.Query("app"), c.Query("redirect_url"))
 	if err != nil {
-		respondDBError(c, err, "app not found")
-		return models.App{}, "", false
-	}
-
-	redirectURL := strings.TrimSpace(c.Query("redirect_url"))
-	if redirectURL == "" {
-		redirectURL = app.DefaultRedirectURL
-	}
-	if redirectURL == "" {
-		respondError(c, http.StatusBadRequest, "redirect_url is required")
-		return models.App{}, "", false
-	}
-
-	redirectURL, err = normalizeBaseURL(redirectURL)
-	if err != nil {
-		respondError(c, http.StatusBadRequest, "invalid redirect_url")
-		return models.App{}, "", false
-	}
-	if !s.redirectAllowed(app, redirectURL) {
-		respondError(c, http.StatusBadRequest, "redirect_url is not registered for app")
+		status, message := oauthStartErrorStatus(err)
+		respondError(c, status, message)
 		return models.App{}, "", false
 	}
 
 	return app, redirectURL, true
+}
+
+func (s *Server) resolveOAuthStartParams(appSlug, rawRedirectURL string) (models.App, string, error) {
+	app, err := s.loadActiveApp(strings.TrimSpace(appSlug))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return models.App{}, "", oauthStartError{status: http.StatusNotFound, message: "app not found"}
+		}
+		return models.App{}, "", err
+	}
+
+	redirectURL := strings.TrimSpace(rawRedirectURL)
+	if redirectURL == "" {
+		redirectURL = app.DefaultRedirectURL
+	}
+	if redirectURL == "" {
+		return models.App{}, "", oauthStartError{status: http.StatusBadRequest, message: "redirect_url is required"}
+	}
+
+	redirectURL, err = normalizeBaseURL(redirectURL)
+	if err != nil {
+		return models.App{}, "", oauthStartError{status: http.StatusBadRequest, message: "invalid redirect_url"}
+	}
+	if !s.redirectAllowed(app, redirectURL) {
+		return models.App{}, "", oauthStartError{status: http.StatusBadRequest, message: "redirect_url is not registered for app"}
+	}
+
+	return app, redirectURL, nil
+}
+
+func oauthStartErrorStatus(err error) (int, string) {
+	var startErr oauthStartError
+	if errors.As(err, &startErr) {
+		return startErr.status, startErr.message
+	}
+	return http.StatusInternalServerError, "internal server error"
 }
 
 func (s *Server) oauthStartState(c *gin.Context) (oauthState, bool) {

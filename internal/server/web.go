@@ -101,6 +101,15 @@ func (s *Server) homePage(c *gin.Context) {
 }
 
 func (s *Server) loginPage(c *gin.Context) {
+	if strings.TrimSpace(c.Query("app")) != "" {
+		s.appLoginPage(c)
+		return
+	}
+
+	s.adminLoginPage(c)
+}
+
+func (s *Server) adminLoginPage(c *gin.Context) {
 	next := safeAdminPath(c.Query("next"))
 	if session, _, ok := s.sessionFromCookie(c); ok && session.AppID == adminSessionAppID {
 		c.Redirect(http.StatusSeeOther, next)
@@ -124,9 +133,53 @@ func (s *Server) loginPage(c *gin.Context) {
 	}
 
 	s.render(c, http.StatusOK, "login.tmpl", gin.H{
-		"Title":     "Login",
-		"Providers": providers,
-		"Next":      next,
+		"Title":            "Login",
+		"LoginHeading":     "ohmesh 로그인",
+		"LoginDescription": "내 앱과 사용자 데이터 관리를 위해 ohmesh에 로그인합니다.",
+		"InfoTitle":        "앱 관리",
+		"InfoText":         "로그인 후 앱 등록, 도메인 설정, 사용자 세션, JSON 레코드를 한 곳에서 관리합니다.",
+		"Providers":        providers,
+		"Next":             next,
+	})
+}
+
+func (s *Server) appLoginPage(c *gin.Context) {
+	app, redirectURL, err := s.resolveOAuthStartParams(c.Query("app"), c.Query("redirect_url"))
+	if err != nil {
+		status, message := oauthStartErrorStatus(err)
+		s.renderErrorPage(c, status, "로그인 링크를 확인해주세요", message)
+		return
+	}
+
+	if session, _, ok := s.sessionFromCookie(c); ok && session.AppID == app.ID {
+		c.Redirect(http.StatusSeeOther, appendQuery(redirectURL, "ohmesh_login", "success"))
+		return
+	}
+
+	providers := []loginProvider{
+		{
+			Name:          "GitHub",
+			LoginURL:      appOAuthLoginURL("/auth/github/login", app.Slug, redirectURL),
+			Enabled:       s.cfg.GitHubClientID != "" && s.cfg.GitHubClientSecret != "",
+			MissingConfig: "GITHUB_CLIENT_ID 또는 GITHUB_CLIENT_SECRET이 없습니다.",
+		},
+		{
+			Name:          "Google",
+			LoginURL:      appOAuthLoginURL("/auth/google/login", app.Slug, redirectURL),
+			Enabled:       s.cfg.GoogleClientID != "" && s.cfg.GoogleClientSecret != "",
+			MissingConfig: "GOOGLE_CLIENT_ID 또는 GOOGLE_CLIENT_SECRET이 없습니다.",
+		},
+	}
+
+	s.render(c, http.StatusOK, "login.tmpl", gin.H{
+		"Title":            app.Name + " Login",
+		"LoginHeading":     app.Name + " 로그인",
+		"LoginDescription": "ohmesh를 통해 " + app.Name + "에 로그인합니다.",
+		"InfoTitle":        "앱 로그인",
+		"InfoText":         "로그인 후 등록된 사용자 앱으로 돌아가고, 이후 API 요청은 ohmesh 세션 쿠키로 인증됩니다.",
+		"Providers":        providers,
+		"App":              app,
+		"RedirectURL":      redirectURL,
 	})
 }
 
@@ -591,6 +644,13 @@ func appFromForm(c *gin.Context) (models.App, error) {
 func adminOAuthLoginURL(path, redirectURL string) string {
 	values := url.Values{}
 	values.Set("admin", "1")
+	values.Set("redirect_url", redirectURL)
+	return path + "?" + values.Encode()
+}
+
+func appOAuthLoginURL(path, appSlug, redirectURL string) string {
+	values := url.Values{}
+	values.Set("app", appSlug)
 	values.Set("redirect_url", redirectURL)
 	return path + "?" + values.Encode()
 }

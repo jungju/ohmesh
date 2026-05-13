@@ -2,8 +2,8 @@
 {{template "shell_start" .}}
 <div class="row">
   <div>
-    <h1>ohmesh 로그인</h1>
-    <p class="muted">내 앱과 사용자 데이터 관리를 위해 ohmesh에 로그인합니다.</p>
+    <h1>{{.LoginHeading}}</h1>
+    <p class="muted">{{.LoginDescription}}</p>
   </div>
 </div>
 
@@ -32,8 +32,14 @@
   </div>
 
   <div class="plain-panel">
-    <h2>앱 관리</h2>
-    <p class="muted">로그인 후 앱 등록, 도메인 설정, 사용자 세션, JSON 레코드를 한 곳에서 관리합니다.</p>
+    <h2>{{.InfoTitle}}</h2>
+    <p class="muted">{{.InfoText}}</p>
+    {{if .App}}
+      <p class="muted">앱 전용 ID <code>{{.App.Slug}}</code></p>
+    {{end}}
+    {{if .RedirectURL}}
+      <p class="muted">로그인 후 이동 <code>{{.RedirectURL}}</code></p>
+    {{end}}
   </div>
 </section>
 {{template "shell_end" .}}

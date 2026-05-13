@@ -34,7 +34,7 @@ make k8s-port-forward
 Then open:
 
 ```text
-http://localhost:8080
+http://localhost:8081
 ```
 
 The included ingress is configured for:

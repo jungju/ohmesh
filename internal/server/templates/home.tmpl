@@ -2,8 +2,8 @@
 {{template "shell_start" .}}
 <section class="hero">
   <div>
-    <h1>Static apps, one small backend.</h1>
-    <p class="lede">ohmesh는 GitHub Pages나 별도 도메인에 배포된 여러 정적 프론트엔드 앱이 공유하는 가벼운 API 플랫폼입니다.</p>
+    <h1>사용자 앱은 그대로, 로그인과 데이터는 ohmesh로.</h1>
+    <p class="lede">user.com 같은 정적 앱은 로그인 버튼만 ohmesh로 연결합니다. 사용자가 로그인하면 다시 앱으로 돌아오고, 이후 API 호출은 ohmesh 세션 쿠키로 인증됩니다.</p>
     <div class="actions">
       {{if .IsLoggedIn}}
         <a class="button" href="/dashboard">대시보드 열기</a>
@@ -16,53 +16,56 @@
   </div>
   <div class="panel map" aria-label="ohmesh architecture preview">
     <div class="node main">
-      <strong>ohmesh API</strong>
-      <p class="muted">OAuth, sessions, domains, JSON CRUD</p>
+      <strong>user.com</strong>
+      <p class="muted">로그인 버튼과 앱 화면</p>
     </div>
     <div class="grid">
-      <div class="node"><strong>jj</strong><br><span class="muted">custom domain</span></div>
-      <div class="node"><strong>notes</strong><br><span class="muted">GitHub Pages</span></div>
-      <div class="node"><strong>dashboard</strong><br><span class="muted">static app</span></div>
+      <div class="node"><strong>ohmesh</strong><br><span class="muted">로그인 시작</span></div>
+      <div class="node"><strong>GitHub/Google</strong><br><span class="muted">OAuth 인증</span></div>
+      <div class="node"><strong>user.com</strong><br><span class="muted">앱으로 복귀</span></div>
     </div>
     <div class="node">
-      <strong>SQLite v1</strong>
-      <p class="muted">사용자별 앱 데이터를 JSON text로 저장합니다.</p>
+      <strong>ohmesh API</strong>
+      <p class="muted">쿠키 세션으로 사용자별 JSON 데이터를 읽고 씁니다.</p>
     </div>
   </div>
 </section>
 
 <section class="guide-hero">
-  <strong>DB Free!</strong>
-  <h2>앱에 인증 붙이기</h2>
-  <p class="lede">정적 앱은 로그인 버튼과 API 호출만 붙이면 됩니다. 서버도 DB도 앱마다 따로 만들 필요 없이, ohmesh가 OAuth 세션과 사용자별 JSON 저장소를 맡습니다.</p>
+  <strong>Login flow</strong>
+  <h2>사용자 앱은 ohmesh를 로그인 백엔드처럼 씁니다</h2>
+  <p class="lede">사용자는 user.com에서 시작하고 user.com으로 돌아옵니다. 중간의 OAuth, 세션 발급, 허용된 redirect 검증, 사용자별 데이터 스코핑은 ohmesh가 맡습니다.</p>
 </section>
 
 <section class="steps" aria-label="Auth setup steps">
   <div class="step">
-    <h3>앱 등록</h3>
-    <p>앱 관리에서 slug와 redirect URL을 등록합니다. 예: <code>notes</code>, <code>https://example.com/notes</code></p>
+    <h3>user.com에서 로그인 클릭</h3>
+    <p>사용자 앱은 ohmesh의 OAuth 시작 URL로 이동시킵니다. 앱 slug와 돌아올 redirect URL을 함께 보냅니다.</p>
+    <pre>/auth/github/login?app=notes&amp;redirect_url=https://user.com/dashboard</pre>
   </div>
   <div class="step">
-    <h3>로그인 버튼 연결</h3>
-    <p>프론트엔드에서 OAuth 시작 URL로 보냅니다.</p>
-    <pre>/auth/github/login?app=notes&amp;redirect_url=https://example.com/notes</pre>
+    <h3>ohmesh가 인증 처리</h3>
+    <p>ohmesh는 GitHub/Google 로그인을 처리하고, 성공하면 HttpOnly 세션 쿠키를 발급한 뒤 user.com으로 돌려보냅니다.</p>
+    <pre>Set-Cookie: ohmesh_session=...
+Location: https://user.com/dashboard</pre>
   </div>
   <div class="step">
-    <h3>API 호출</h3>
-    <p>로그인 후 쿠키가 붙은 요청으로 현재 사용자와 JSON 레코드를 다룹니다.</p>
-    <pre>GET /auth/me
-GET /api/apps/notes/records</pre>
+    <h3>user.com이 API 호출</h3>
+    <p>앱은 쿠키가 포함되도록 요청하고, ohmesh는 세션에 맞는 사용자 데이터만 응답합니다.</p>
+    <pre>fetch("https://ohmesh.example.com/auth/me", {
+  credentials: "include"
+})</pre>
   </div>
 </section>
 
 <section class="two-col">
   <div class="plain-panel">
-    <h2>v1 범위</h2>
-    <p>Go, Gin, GORM, SQLite로 구성된 단일 API 서버입니다. 조직, 멤버십, 마이크로서비스 없이 개인 사용자 데이터 격리에 집중합니다.</p>
+    <h2>사용자 앱이 하는 일</h2>
+    <p>로그인 버튼을 만들고, 로그인 후 <code>/auth/me</code>로 인증 상태를 확인합니다. API 호출에는 <code>credentials: "include"</code>를 넣어 ohmesh 쿠키가 함께 가도록 합니다.</p>
   </div>
   <div class="plain-panel">
-    <h2>앱을 위한 공통 기능</h2>
-    <p>정적 프론트엔드 앱마다 반복해서 필요한 OAuth 로그인, 쿠키 세션, 허용 도메인, 사용자별 JSON CRUD를 한 서비스에서 제공합니다.</p>
+    <h2>ohmesh가 맡는 일</h2>
+    <p>OAuth 로그인, 세션 쿠키, 허용된 앱 도메인과 redirect URL 검증, 사용자별 JSON CRUD를 담당합니다. 사용자 앱은 별도 서버나 DB 없이 인증된 데이터 API를 사용합니다.</p>
   </div>
 </section>
 {{template "shell_end" .}}

@@ -44,6 +44,17 @@ func (s *Server) createApp(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if appLimitCreateRequiresManager(req) {
+		canManageLimits, err := s.userCanManageAppLimits(admin.User)
+		if err != nil {
+			respondError(c, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		if !canManageLimits {
+			respondError(c, http.StatusForbidden, "app limits can only be changed by the ohmesh owner account")
+			return
+		}
+	}
 	app.OwnerID = admin.User.ID
 
 	if err := s.db.Create(&app).Error; err != nil {
@@ -127,12 +138,23 @@ func (s *Server) updateApp(c *gin.Context) {
 		respondError(c, http.StatusBadRequest, "invalid user_limit")
 		return
 	}
-	if req.UserLimit > 0 {
-		updates["user_limit"] = req.UserLimit
-	}
 	if req.RecordLimit < 0 {
 		respondError(c, http.StatusBadRequest, "invalid record_limit")
 		return
+	}
+	if appLimitUpdateRequested(req) {
+		canManageLimits, err := s.userCanManageAppLimits(admin.User)
+		if err != nil {
+			respondError(c, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		if !canManageLimits {
+			respondError(c, http.StatusForbidden, "app limits can only be changed by the ohmesh owner account")
+			return
+		}
+	}
+	if req.UserLimit > 0 {
+		updates["user_limit"] = req.UserLimit
 	}
 	if req.RecordLimit > 0 {
 		updates["record_limit"] = req.RecordLimit
@@ -351,6 +373,15 @@ func appFromRequest(c *gin.Context, req appRequest) (models.App, bool) {
 
 func validAppStatus(status string) bool {
 	return status == models.AppStatusActive || status == models.AppStatusDisabled
+}
+
+func appLimitCreateRequiresManager(req appRequest) bool {
+	return (req.UserLimit != 0 && req.UserLimit != models.DefaultAppUserLimit) ||
+		(req.RecordLimit != 0 && req.RecordLimit != models.DefaultAppRecordLimit)
+}
+
+func appLimitUpdateRequested(req appRequest) bool {
+	return req.UserLimit != 0 || req.RecordLimit != 0
 }
 
 func normalizeRecordType(recordType string) (string, error) {

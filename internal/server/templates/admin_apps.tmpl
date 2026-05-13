@@ -64,14 +64,16 @@
         <option value="disabled">disabled</option>
       </select>
     </label>
-    <label>
-      사용자 Limit
-      <input name="user_limit" type="number" min="1" value="5" required>
-    </label>
-    <label>
-      데이터 Limit
-      <input name="record_limit" type="number" min="1" value="10" required>
-    </label>
+    {{if .CanManageAppLimits}}
+      <label>
+        사용자 Limit
+        <input name="user_limit" type="number" min="1" value="5" required>
+      </label>
+      <label>
+        데이터 Limit
+        <input name="record_limit" type="number" min="1" value="10" required>
+      </label>
+    {{end}}
     <div class="wide inline-actions modal-actions">
       <button type="submit">앱 만들기</button>
       <button class="secondary" type="button" data-dialog-close="add-app-dialog">취소</button>
@@ -113,14 +115,25 @@
         기본 Redirect URL
         <input name="default_redirect_url" value="{{.DefaultRedirectURL}}">
       </label>
-      <label>
-        사용자 Limit
-        <input name="user_limit" type="number" min="1" value="{{appUserLimit .}}" required>
-      </label>
-      <label>
-        데이터 Limit
-        <input name="record_limit" type="number" min="1" value="{{appRecordLimit .}}" required>
-      </label>
+      {{if $.CanManageAppLimits}}
+        <label>
+          사용자 Limit
+          <input name="user_limit" type="number" min="1" value="{{appUserLimit .}}" required>
+        </label>
+        <label>
+          데이터 Limit
+          <input name="record_limit" type="number" min="1" value="{{appRecordLimit .}}" required>
+        </label>
+      {{else}}
+        <label>
+          사용자 Limit
+          <input value="{{appUserLimit .}}" disabled>
+        </label>
+        <label>
+          데이터 Limit
+          <input value="{{appRecordLimit .}}" disabled>
+        </label>
+      {{end}}
       <div class="wide inline-actions">
         <button type="submit">저장</button>
       </div>

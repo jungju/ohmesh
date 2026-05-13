@@ -251,12 +251,23 @@ func (s *Server) webListApps(c *gin.Context) {
 }
 
 func (s *Server) webCreateApp(c *gin.Context) {
-	app, err := appFromForm(c)
+	adminUser := adminUserFromContext(c)
+	canManageLimits, err := s.userCanManageAppLimits(adminUser)
+	if err != nil {
+		s.renderAppManager(c, http.StatusInternalServerError, "앱 limit 권한을 확인하지 못했습니다.", c.Query("app"))
+		return
+	}
+	if !canManageLimits && formAppLimitCustomRequested(c) {
+		s.renderAppManager(c, http.StatusForbidden, "앱 limit은 ohmesh 소유자 계정만 변경할 수 있습니다.", c.Query("app"))
+		return
+	}
+
+	app, err := appFromForm(c, canManageLimits)
 	if err != nil {
 		s.renderAppManager(c, http.StatusBadRequest, err.Error(), c.Query("app"))
 		return
 	}
-	app.OwnerID = adminUserFromContext(c).ID
+	app.OwnerID = adminUser.ID
 
 	if err := s.db.Create(&app).Error; err != nil {
 		s.renderAppManager(c, http.StatusConflict, "이미 사용 중인 앱 slug입니다.", c.Query("app"))
@@ -271,7 +282,8 @@ func (s *Server) webAppDetail(c *gin.Context) {
 }
 
 func (s *Server) webUpdateApp(c *gin.Context) {
-	app, err := s.appBySlugForOwner(c.Param("slug"), adminUserFromContext(c).ID)
+	adminUser := adminUserFromContext(c)
+	app, err := s.appBySlugForOwner(c.Param("slug"), adminUser.ID)
 	if err != nil {
 		s.renderErrorPage(c, http.StatusNotFound, "App not found", "앱을 찾을 수 없습니다.")
 		return
@@ -304,6 +316,15 @@ func (s *Server) webUpdateApp(c *gin.Context) {
 	}
 	updates["status"] = status
 	if raw := strings.TrimSpace(c.PostForm("user_limit")); raw != "" {
+		canManageLimits, err := s.userCanManageAppLimits(adminUser)
+		if err != nil {
+			s.renderAppManager(c, http.StatusInternalServerError, "앱 limit 권한을 확인하지 못했습니다.", app.Slug)
+			return
+		}
+		if !canManageLimits {
+			s.renderAppManager(c, http.StatusForbidden, "앱 limit은 ohmesh 소유자 계정만 변경할 수 있습니다.", app.Slug)
+			return
+		}
 		userLimit, err := parseAppLimit(raw, models.DefaultAppUserLimit)
 		if err != nil {
 			s.renderAppManager(c, http.StatusBadRequest, "사용자 limit은 1 이상이어야 합니다.", app.Slug)
@@ -312,6 +333,15 @@ func (s *Server) webUpdateApp(c *gin.Context) {
 		updates["user_limit"] = userLimit
 	}
 	if raw := strings.TrimSpace(c.PostForm("record_limit")); raw != "" {
+		canManageLimits, err := s.userCanManageAppLimits(adminUser)
+		if err != nil {
+			s.renderAppManager(c, http.StatusInternalServerError, "앱 limit 권한을 확인하지 못했습니다.", app.Slug)
+			return
+		}
+		if !canManageLimits {
+			s.renderAppManager(c, http.StatusForbidden, "앱 limit은 ohmesh 소유자 계정만 변경할 수 있습니다.", app.Slug)
+			return
+		}
 		recordLimit, err := parseAppLimit(raw, models.DefaultAppRecordLimit)
 		if err != nil {
 			s.renderAppManager(c, http.StatusBadRequest, "데이터 limit은 1 이상이어야 합니다.", app.Slug)
@@ -554,13 +584,17 @@ func (s *Server) renderAppManager(c *gin.Context, status int, errorMessage, sele
 	}
 
 	data := gin.H{
-		"Title":        "Apps",
-		"Apps":         apps,
-		"SelectedSlug": selectedSlug,
-		"Error":        errorMessage,
-		"Limit":        boundedIntQuery(c.Query("limit"), 100, 1, 500),
-		"TypeFilter":   strings.TrimSpace(c.Query("type")),
-		"UserIDFilter": strings.TrimSpace(c.Query("user_id")),
+		"Title":              "Apps",
+		"Apps":               apps,
+		"SelectedSlug":       selectedSlug,
+		"Error":              errorMessage,
+		"Limit":              boundedIntQuery(c.Query("limit"), 100, 1, 500),
+		"TypeFilter":         strings.TrimSpace(c.Query("type")),
+		"UserIDFilter":       strings.TrimSpace(c.Query("user_id")),
+		"CanManageAppLimits": false,
+	}
+	if canManageLimits, err := s.userCanManageAppLimits(adminUser); err == nil {
+		data["CanManageAppLimits"] = canManageLimits
 	}
 
 	if selectedSlug != "" {
@@ -644,7 +678,7 @@ func (s *Server) filteredAppRecords(c *gin.Context, appID uint) ([]models.AppRec
 	return records, err
 }
 
-func appFromForm(c *gin.Context) (models.App, error) {
+func appFromForm(c *gin.Context, canManageLimits bool) (models.App, error) {
 	slug := strings.TrimSpace(c.PostForm("slug"))
 	name := strings.TrimSpace(c.PostForm("name"))
 	redirectURL := strings.TrimSpace(c.PostForm("default_redirect_url"))
@@ -670,13 +704,19 @@ func appFromForm(c *gin.Context) (models.App, error) {
 		}
 		redirectURL = normalized
 	}
-	userLimit, err := parseAppLimit(c.PostForm("user_limit"), models.DefaultAppUserLimit)
-	if err != nil {
-		return models.App{}, errors.New("사용자 limit은 1 이상이어야 합니다.")
-	}
-	recordLimit, err := parseAppLimit(c.PostForm("record_limit"), models.DefaultAppRecordLimit)
-	if err != nil {
-		return models.App{}, errors.New("데이터 limit은 1 이상이어야 합니다.")
+	userLimit := models.DefaultAppUserLimit
+	recordLimit := models.DefaultAppRecordLimit
+	if canManageLimits {
+		parsedUserLimit, err := parseAppLimit(c.PostForm("user_limit"), models.DefaultAppUserLimit)
+		if err != nil {
+			return models.App{}, errors.New("사용자 limit은 1 이상이어야 합니다.")
+		}
+		parsedRecordLimit, err := parseAppLimit(c.PostForm("record_limit"), models.DefaultAppRecordLimit)
+		if err != nil {
+			return models.App{}, errors.New("데이터 limit은 1 이상이어야 합니다.")
+		}
+		userLimit = parsedUserLimit
+		recordLimit = parsedRecordLimit
 	}
 
 	return models.App{
@@ -699,6 +739,23 @@ func parseAppLimit(raw string, fallback int) (int, error) {
 		return 0, errors.New("app limit must be positive")
 	}
 	return value, nil
+}
+
+func formAppLimitCustomRequested(c *gin.Context) bool {
+	return formLimitCustomRequested(c.PostForm("user_limit"), models.DefaultAppUserLimit) ||
+		formLimitCustomRequested(c.PostForm("record_limit"), models.DefaultAppRecordLimit)
+}
+
+func formLimitCustomRequested(raw string, fallback int) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil {
+		return true
+	}
+	return value != fallback
 }
 
 func adminOAuthLoginURL(path, redirectURL string) string {

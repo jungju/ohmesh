@@ -396,6 +396,22 @@ func effectiveAppRecordLimit(app models.App) int {
 	return models.DefaultAppRecordLimit
 }
 
+func (s *Server) userCanManageAppLimits(user models.User) (bool, error) {
+	if user.ID == 0 {
+		return false, nil
+	}
+
+	var firstApp models.App
+	err := s.db.Select("owner_id").Order("created_at ASC, id ASC").First(&firstApp).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return firstApp.OwnerID == user.ID, nil
+}
+
 func (s *Server) clearSessionCookie(c *gin.Context, name string) {
 	sameSite := http.SameSiteLaxMode
 	if s.cfg.CookieSecure {

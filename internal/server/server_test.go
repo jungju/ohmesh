@@ -634,6 +634,91 @@ func TestAdminAppsAreScopedToLoggedInOwner(t *testing.T) {
 	}
 }
 
+func TestOnlyFirstAppOwnerCanUpdateAppLimits(t *testing.T) {
+	router, db := newTestRouter(t)
+
+	owner := models.User{Email: "owner@example.com", Name: "Owner"}
+	other := models.User{Email: "other@example.com", Name: "Other"}
+	if err := db.Create(&owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	ownerApp := models.App{
+		OwnerID:     owner.ID,
+		Slug:        "owned",
+		Name:        "Owned",
+		Status:      models.AppStatusActive,
+		UserLimit:   5,
+		RecordLimit: 10,
+	}
+	otherApp := models.App{
+		OwnerID:     other.ID,
+		Slug:        "other",
+		Name:        "Other",
+		Status:      models.AppStatusActive,
+		UserLimit:   5,
+		RecordLimit: 10,
+	}
+	if err := db.Create(&ownerApp).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&otherApp).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	ownerToken := createTestSession(t, db, owner.ID, adminSessionAppID)
+	otherToken := createTestSession(t, db, other.ID, adminSessionAppID)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPatch, "/api/apps/other", bytes.NewBufferString(`{"name":"Other Updated"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName(adminSessionAppID), Value: otherToken})
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("non-owner should still update ordinary app fields, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPatch, "/api/apps/other", bytes.NewBufferString(`{"user_limit":9,"record_limit":20}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName(adminSessionAppID), Value: otherToken})
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("non-owner app limit update expected 403, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var reloadedOtherApp models.App
+	if err := db.Where("slug = ?", "other").First(&reloadedOtherApp).Error; err != nil {
+		t.Fatal(err)
+	}
+	if reloadedOtherApp.UserLimit != 5 || reloadedOtherApp.RecordLimit != 10 {
+		t.Fatalf("non-owner should not change limits: %#v", reloadedOtherApp)
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/admin/apps?app=other", nil)
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName(adminSessionAppID), Value: otherToken})
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("non-owner admin apps expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), `name="user_limit"`) || strings.Contains(rec.Body.String(), `name="record_limit"`) {
+		t.Fatalf("non-owner admin UI should not render editable limit fields: %s", rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPatch, "/api/apps/owned", bytes.NewBufferString(`{"user_limit":9,"record_limit":20}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName(adminSessionAppID), Value: ownerToken})
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first app owner should update app limits, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestRecordCRUDUsesCurrentUserAndApp(t *testing.T) {
 	router, db := newTestRouter(t)
 

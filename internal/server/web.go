@@ -58,6 +58,12 @@ func mustTemplates() *template.Template {
 		"appLogoutPageURL": func(app models.App) string {
 			return appPublicPageURL("/logout", app)
 		},
+		"appUserLimit": func(app models.App) int {
+			return effectiveAppUserLimit(app)
+		},
+		"appRecordLimit": func(app models.App) int {
+			return effectiveAppRecordLimit(app)
+		},
 	}
 
 	return template.Must(template.New("").Funcs(funcs).ParseFS(templateFiles, "templates/*.tmpl"))
@@ -297,6 +303,22 @@ func (s *Server) webUpdateApp(c *gin.Context) {
 		return
 	}
 	updates["status"] = status
+	if raw := strings.TrimSpace(c.PostForm("user_limit")); raw != "" {
+		userLimit, err := parseAppLimit(raw, models.DefaultAppUserLimit)
+		if err != nil {
+			s.renderAppManager(c, http.StatusBadRequest, "사용자 limit은 1 이상이어야 합니다.", app.Slug)
+			return
+		}
+		updates["user_limit"] = userLimit
+	}
+	if raw := strings.TrimSpace(c.PostForm("record_limit")); raw != "" {
+		recordLimit, err := parseAppLimit(raw, models.DefaultAppRecordLimit)
+		if err != nil {
+			s.renderAppManager(c, http.StatusBadRequest, "데이터 limit은 1 이상이어야 합니다.", app.Slug)
+			return
+		}
+		updates["record_limit"] = recordLimit
+	}
 
 	if err := s.db.Model(&app).Updates(updates).Error; err != nil {
 		s.renderAppManager(c, http.StatusInternalServerError, "앱을 저장하지 못했습니다.", app.Slug)
@@ -444,7 +466,24 @@ func (s *Server) webCreateAppRecord(c *gin.Context) {
 		Type:   recordType,
 		Data:   models.JSONText(rawData),
 	}
-	if err := s.db.Create(&record).Error; err != nil {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := ensureAppUserLimit(tx, uint(userID), app.ID); err != nil {
+			return err
+		}
+		if err := ensureAppRecordLimit(tx, app); err != nil {
+			return err
+		}
+		return tx.Create(&record).Error
+	})
+	if errors.Is(err, errAppUserLimitReached) {
+		s.renderAppManager(c, http.StatusForbidden, "앱 사용자 limit에 도달했습니다.", app.Slug)
+		return
+	}
+	if errors.Is(err, errAppRecordLimitReached) {
+		s.renderAppManager(c, http.StatusForbidden, "앱 데이터 limit에 도달했습니다.", app.Slug)
+		return
+	}
+	if err != nil {
 		s.renderAppManager(c, http.StatusInternalServerError, "레코드를 만들지 못했습니다.", app.Slug)
 		return
 	}
@@ -631,13 +670,35 @@ func appFromForm(c *gin.Context) (models.App, error) {
 		}
 		redirectURL = normalized
 	}
+	userLimit, err := parseAppLimit(c.PostForm("user_limit"), models.DefaultAppUserLimit)
+	if err != nil {
+		return models.App{}, errors.New("사용자 limit은 1 이상이어야 합니다.")
+	}
+	recordLimit, err := parseAppLimit(c.PostForm("record_limit"), models.DefaultAppRecordLimit)
+	if err != nil {
+		return models.App{}, errors.New("데이터 limit은 1 이상이어야 합니다.")
+	}
 
 	return models.App{
 		Slug:               slug,
 		Name:               name,
 		DefaultRedirectURL: redirectURL,
 		Status:             status,
+		UserLimit:          userLimit,
+		RecordLimit:        recordLimit,
 	}, nil
+}
+
+func parseAppLimit(raw string, fallback int) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 1 {
+		return 0, errors.New("app limit must be positive")
+	}
+	return value, nil
 }
 
 func adminOAuthLoginURL(path, redirectURL string) string {
@@ -669,6 +730,8 @@ ohmesh base URL: ` + baseURL + `
 App slug: ` + app.Slug + `
 App name: ` + app.Name + `
 Registered redirect URL: ` + redirectURL + `
+App user limit: ` + strconv.Itoa(effectiveAppUserLimit(app)) + `
+App record limit: ` + strconv.Itoa(effectiveAppRecordLimit(app)) + `
 Machine-readable API guide: ` + baseURL + `/llms.txt
 OpenAPI spec: ` + baseURL + `/openapi.json
 
@@ -720,6 +783,7 @@ Important constraints:
 - Do not use localStorage or visible tokens for ohmesh authentication.
 - Do not expect OAuth access tokens, refresh tokens, or raw session tokens in any API response.
 - Every data record is scoped to the current authenticated user and this app.
+- This app currently allows up to ` + strconv.Itoa(effectiveAppUserLimit(app)) + ` users and ` + strconv.Itoa(effectiveAppRecordLimit(app)) + ` total JSON records.
 - The "data" field can be any valid JSON value.
 - The "type" field is required and must be 120 characters or less.
 - Handle 401 by asking the user to log in again.

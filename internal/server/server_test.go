@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -51,6 +52,7 @@ func TestMachineReadableDocsRender(t *testing.T) {
 		"GET https://ohmesh.example.com/auth/me?app={app_slug}",
 		"POST https://ohmesh.example.com/api/apps/{app_slug}/records",
 		`credentials: "include"`,
+		"Default app limits are 5 users and 10 total JSON records.",
 		"Machine-readable OpenAPI spec: https://ohmesh.example.com/openapi.json",
 	} {
 		if !strings.Contains(body, expected) {
@@ -184,6 +186,12 @@ func TestWebPagesRender(t *testing.T) {
 	if !strings.Contains(body, `data-dialog-open="run-prompt-dialog"`) {
 		t.Fatalf("admin apps should render run prompt button: %s", body)
 	}
+	if !strings.Contains(body, `name="user_limit" type="number" min="1" value="5"`) {
+		t.Fatalf("admin apps should render default user limit field: %s", body)
+	}
+	if !strings.Contains(body, `name="record_limit" type="number" min="1" value="10"`) {
+		t.Fatalf("admin apps should render default record limit field: %s", body)
+	}
 	if !strings.Contains(body, `<dialog id="run-prompt-dialog"`) {
 		t.Fatalf("admin apps should render run prompt dialog: %s", body)
 	}
@@ -203,6 +211,8 @@ func TestWebPagesRender(t *testing.T) {
 		"Integrate ohmesh as this app&#39;s authentication service",
 		"App slug: notes",
 		"Registered redirect URL: https://example.com/notes",
+		"App user limit: 5",
+		"App record limit: 10",
 		"POST http://example.com/api/apps/notes/records",
 		"OpenAPI spec: http://example.com/openapi.json",
 	} {
@@ -688,6 +698,66 @@ func TestRecordCRUDUsesCurrentUserAndApp(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestAppLimitsAreEnforced(t *testing.T) {
+	router, db := newTestRouter(t)
+
+	app := models.App{
+		Slug:        "notes",
+		Name:        "Notes",
+		Status:      models.AppStatusActive,
+		UserLimit:   1,
+		RecordLimit: 1,
+	}
+	if err := db.Create(&app).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	user := models.User{Email: "user@example.com", Name: "User"}
+	otherUser := models.User{Email: "other@example.com", Name: "Other"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&otherUser).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	token := createTestSession(t, db, user.ID, app.ID)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/apps/notes/records", bytes.NewBufferString(`{"type":"note","data":{"title":"First"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName(app.ID), Value: token})
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("first record expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/apps/notes/records", bytes.NewBufferString(`{"type":"note","data":{"title":"Second"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName(app.ID), Value: token})
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("second record should hit record limit, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "app record limit reached") {
+		t.Fatalf("record limit response should explain the limit: %s", rec.Body.String())
+	}
+
+	server := &Server{db: db, cfg: newTestConfig()}
+	existingUserCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	existingUserCtx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	if err := server.createSession(existingUserCtx, user.ID, app.ID); err != nil {
+		t.Fatalf("existing app user should be able to create a new session: %v", err)
+	}
+
+	newUserCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	newUserCtx.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	err := server.createSession(newUserCtx, otherUser.ID, app.ID)
+	if !errors.Is(err, errAppUserLimitReached) {
+		t.Fatalf("new app user should hit user limit, got %v", err)
 	}
 }
 

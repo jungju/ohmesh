@@ -39,6 +39,11 @@ type adminContext struct {
 
 const adminSessionAppID uint = 0
 
+var (
+	errAppUserLimitReached   = errors.New("app user limit reached")
+	errAppRecordLimitReached = errors.New("app record limit reached")
+)
+
 func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 	s := &Server{db: db, cfg: cfg}
 
@@ -300,7 +305,14 @@ func (s *Server) createSession(c *gin.Context, userID, appID uint) error {
 		TokenHash: hashToken(token),
 		ExpiresAt: expiresAt,
 	}
-	if err := s.db.Create(&session).Error; err != nil {
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if appID != adminSessionAppID {
+			if err := ensureAppUserLimit(tx, userID, appID); err != nil {
+				return err
+			}
+		}
+		return tx.Create(&session).Error
+	}); err != nil {
 		return err
 	}
 
@@ -321,6 +333,67 @@ func (s *Server) createSession(c *gin.Context, userID, appID uint) error {
 	})
 
 	return nil
+}
+
+func ensureAppUserLimit(tx *gorm.DB, userID, appID uint) error {
+	var app models.App
+	if err := tx.First(&app, appID).Error; err != nil {
+		return err
+	}
+
+	var existing int64
+	if err := tx.Raw(`
+		SELECT COUNT(*) FROM (
+			SELECT user_id FROM sessions WHERE app_id = ? AND user_id = ?
+			UNION
+			SELECT user_id FROM app_records WHERE app_id = ? AND user_id = ?
+		) AS existing_app_user
+	`, appID, userID, appID, userID).Scan(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return nil
+	}
+
+	var count int64
+	if err := tx.Raw(`
+		SELECT COUNT(*) FROM (
+			SELECT user_id FROM sessions WHERE app_id = ?
+			UNION
+			SELECT user_id FROM app_records WHERE app_id = ?
+		) AS app_users
+	`, appID, appID).Scan(&count).Error; err != nil {
+		return err
+	}
+	if count >= int64(effectiveAppUserLimit(app)) {
+		return errAppUserLimitReached
+	}
+	return nil
+}
+
+func ensureAppRecordLimit(tx *gorm.DB, app models.App) error {
+	var count int64
+	if err := tx.Model(&models.AppRecord{}).Where("app_id = ?", app.ID).Count(&count).Error; err != nil {
+		return err
+	}
+	if count >= int64(effectiveAppRecordLimit(app)) {
+		return errAppRecordLimitReached
+	}
+	return nil
+}
+
+func effectiveAppUserLimit(app models.App) int {
+	if app.UserLimit > 0 {
+		return app.UserLimit
+	}
+	return models.DefaultAppUserLimit
+}
+
+func effectiveAppRecordLimit(app models.App) int {
+	if app.RecordLimit > 0 {
+		return app.RecordLimit
+	}
+	return models.DefaultAppRecordLimit
 }
 
 func (s *Server) clearSessionCookie(c *gin.Context, name string) {

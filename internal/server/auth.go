@@ -212,8 +212,7 @@ func (s *Server) githubCallback(c *gin.Context) {
 		return
 	}
 
-	if err := s.createSession(c, user.ID, appID); err != nil {
-		respondError(c, http.StatusInternalServerError, "internal server error")
+	if !s.createOAuthSession(c, user.ID, appID) {
 		return
 	}
 
@@ -273,12 +272,23 @@ func (s *Server) googleCallback(c *gin.Context) {
 		return
 	}
 
-	if err := s.createSession(c, user.ID, appID); err != nil {
-		respondError(c, http.StatusInternalServerError, "internal server error")
+	if !s.createOAuthSession(c, user.ID, appID) {
 		return
 	}
 
 	c.Redirect(http.StatusFound, appendQuery(state.RedirectURL, "ohmesh_login", "success"))
+}
+
+func (s *Server) createOAuthSession(c *gin.Context, userID, appID uint) bool {
+	if err := s.createSession(c, userID, appID); err != nil {
+		if errors.Is(err, errAppUserLimitReached) {
+			respondError(c, http.StatusForbidden, "app user limit reached")
+			return false
+		}
+		respondError(c, http.StatusInternalServerError, "internal server error")
+		return false
+	}
+	return true
 }
 
 func (s *Server) me(c *gin.Context) {

@@ -75,7 +75,17 @@ func (s *Server) createRecord(c *gin.Context) {
 		Type:   recordType,
 		Data:   models.JSONText(data),
 	}
-	if err := s.db.Create(&record).Error; err != nil {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := ensureAppRecordLimit(tx, auth.App); err != nil {
+			return err
+		}
+		return tx.Create(&record).Error
+	})
+	if errors.Is(err, errAppRecordLimitReached) {
+		respondError(c, http.StatusForbidden, "app record limit reached")
+		return
+	}
+	if err != nil {
 		respondError(c, http.StatusInternalServerError, "internal server error")
 		return
 	}

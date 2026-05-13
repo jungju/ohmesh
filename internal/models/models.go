@@ -16,6 +16,9 @@ const (
 
 	IdentityProviderGitHub = "github"
 	IdentityProviderGoogle = "google"
+
+	DefaultAppUserLimit   = 5
+	DefaultAppRecordLimit = 10
 )
 
 type JSONText []byte
@@ -98,6 +101,8 @@ type App struct {
 	Name               string      `gorm:"not null;size:160" json:"name"`
 	DefaultRedirectURL string      `json:"default_redirect_url"`
 	Status             string      `gorm:"not null;size:20;index" json:"status"`
+	UserLimit          int         `gorm:"not null;default:5" json:"user_limit"`
+	RecordLimit        int         `gorm:"not null;default:10" json:"record_limit"`
 	Domains            []AppDomain `json:"domains,omitempty"`
 	CreatedAt          time.Time   `json:"created_at"`
 	UpdatedAt          time.Time   `json:"updated_at"`
@@ -138,12 +143,21 @@ type AppRecord struct {
 }
 
 func AutoMigrate(db *gorm.DB) error {
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&User{},
 		&Identity{},
 		&App{},
 		&AppDomain{},
 		&Session{},
 		&AppRecord{},
-	)
+	); err != nil {
+		return err
+	}
+	if err := db.Model(&App{}).Where("user_limit <= ?", 0).Update("user_limit", DefaultAppUserLimit).Error; err != nil {
+		return err
+	}
+	if err := db.Model(&App{}).Where("record_limit <= ?", 0).Update("record_limit", DefaultAppRecordLimit).Error; err != nil {
+		return err
+	}
+	return nil
 }

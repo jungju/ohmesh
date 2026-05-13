@@ -19,6 +19,8 @@ type appRequest struct {
 	Name               string `json:"name"`
 	DefaultRedirectURL string `json:"default_redirect_url"`
 	Status             string `json:"status"`
+	UserLimit          int    `json:"user_limit"`
+	RecordLimit        int    `json:"record_limit"`
 }
 
 type appDomainRequest struct {
@@ -120,6 +122,20 @@ func (s *Server) updateApp(c *gin.Context) {
 			return
 		}
 		updates["status"] = req.Status
+	}
+	if req.UserLimit < 0 {
+		respondError(c, http.StatusBadRequest, "invalid user_limit")
+		return
+	}
+	if req.UserLimit > 0 {
+		updates["user_limit"] = req.UserLimit
+	}
+	if req.RecordLimit < 0 {
+		respondError(c, http.StatusBadRequest, "invalid record_limit")
+		return
+	}
+	if req.RecordLimit > 0 {
+		updates["record_limit"] = req.RecordLimit
 	}
 
 	if len(updates) > 0 {
@@ -296,6 +312,22 @@ func appFromRequest(c *gin.Context, req appRequest) (models.App, bool) {
 		respondError(c, http.StatusBadRequest, "invalid app status")
 		return models.App{}, false
 	}
+	userLimit := req.UserLimit
+	if userLimit == 0 {
+		userLimit = models.DefaultAppUserLimit
+	}
+	if userLimit < 1 {
+		respondError(c, http.StatusBadRequest, "invalid user_limit")
+		return models.App{}, false
+	}
+	recordLimit := req.RecordLimit
+	if recordLimit == 0 {
+		recordLimit = models.DefaultAppRecordLimit
+	}
+	if recordLimit < 1 {
+		respondError(c, http.StatusBadRequest, "invalid record_limit")
+		return models.App{}, false
+	}
 
 	var redirectURL string
 	if strings.TrimSpace(req.DefaultRedirectURL) != "" {
@@ -312,6 +344,8 @@ func appFromRequest(c *gin.Context, req appRequest) (models.App, bool) {
 		Name:               name,
 		DefaultRedirectURL: redirectURL,
 		Status:             status,
+		UserLimit:          userLimit,
+		RecordLimit:        recordLimit,
 	}, true
 }
 

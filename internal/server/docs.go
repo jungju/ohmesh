@@ -25,6 +25,7 @@ Base URL: `+baseURL+`
 3. After OAuth succeeds, ohmesh redirects back to the registered redirect URL and sets an app-specific HttpOnly session cookie.
 4. Browser API calls must use credentials: "include" so the cookie is sent.
 5. Data records are always scoped to the current session user and app.
+6. By default, each app allows up to 5 users and 10 total JSON records unless changed in app settings.
 
 ## Check Login
 
@@ -90,6 +91,7 @@ POST `+baseURL+`/auth/logout?app={app_slug}&redirect_url={encoded_app_url}
 - Never expect OAuth access tokens, refresh tokens, or raw session tokens in API responses.
 - data must be valid JSON.
 - type is required and must be 120 characters or less.
+- Default app limits are 5 users and 10 total JSON records.
 - CORS requests must come from a registered app domain or allowed origin.
 
 Machine-readable OpenAPI spec: `+baseURL+`/openapi.json
@@ -208,7 +210,7 @@ func (s *Server) openapiJSON(c *gin.Context) {
 						"201": jsonResponse("Created record.", "Record"),
 						"400": errorResponse("Invalid JSON body, missing type, or invalid data."),
 						"401": errorResponse("Login required."),
-						"403": errorResponse("Session is not valid for this app."),
+						"403": errorResponse("Session is not valid for this app, or the app record limit was reached."),
 						"404": errorResponse("App not found."),
 					},
 				},

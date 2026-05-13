@@ -54,6 +54,14 @@ func mustTemplates() *template.Template {
 			}
 			return string(data)
 		},
+		"appLoginPageURL": func(app models.App) string {
+			values := url.Values{}
+			values.Set("app", app.Slug)
+			if app.DefaultRedirectURL != "" {
+				values.Set("redirect_url", app.DefaultRedirectURL)
+			}
+			return "/login?" + values.Encode()
+		},
 	}
 
 	return template.Must(template.New("").Funcs(funcs).ParseFS(templateFiles, "templates/*.tmpl"))

@@ -79,6 +79,7 @@
         <h2>앱 설정</h2>
         <p class="muted"><code>{{.Slug}}</code></p>
       </div>
+      <a class="button secondary" href="{{appLoginPageURL .}}" target="_blank" rel="noopener">로그인 페이지</a>
     </div>
     <form method="post" action="/admin/apps/{{.Slug}}" class="form-grid">
       <label>

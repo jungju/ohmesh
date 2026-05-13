@@ -122,6 +122,9 @@ func TestWebPagesRender(t *testing.T) {
 	if strings.Contains(body, `<details class="add-app"`) {
 		t.Fatalf("admin apps should not render add app disclosure: %s", body)
 	}
+	if !strings.Contains(body, `href="/login?app=notes&amp;redirect_url=https%3A%2F%2Fexample.com%2Fnotes"`) {
+		t.Fatalf("admin apps should link to selected app login page: %s", body)
+	}
 }
 
 func TestNavigationReflectsLoginState(t *testing.T) {

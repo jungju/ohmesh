@@ -155,8 +155,9 @@ func (s *Server) requireAppSession(c *gin.Context) (authedContext, bool) {
 		return authedContext{}, false
 	}
 
-	session, user, ok := s.sessionFromRequest(c)
+	session, user, ok := s.appSessionFromCookie(c, app)
 	if !ok {
+		respondError(c, http.StatusUnauthorized, "login required")
 		return authedContext{}, false
 	}
 
@@ -179,18 +180,65 @@ func (s *Server) sessionFromRequest(c *gin.Context) (models.Session, models.User
 }
 
 func (s *Server) sessionFromCookie(c *gin.Context) (models.Session, models.User, bool) {
-	token, err := c.Cookie(s.cfg.SessionCookieName)
+	if appSlug := strings.TrimSpace(c.Query("app")); appSlug != "" {
+		if app, err := s.loadActiveApp(appSlug); err == nil {
+			if session, user, ok := s.appSessionFromCookie(c, app); ok {
+				return session, user, true
+			}
+		}
+	}
+
+	if session, user, ok := s.anyAppSessionFromCookie(c); ok {
+		return session, user, true
+	}
+	if session, user, ok := s.adminSessionFromCookieValue(c); ok {
+		return session, user, true
+	}
+	return s.sessionFromCookieName(c, s.cfg.SessionCookieName)
+}
+
+func (s *Server) sessionFromCookieName(c *gin.Context, name string) (models.Session, models.User, bool) {
+	token, err := c.Cookie(name)
 	if err != nil || token == "" {
 		return models.Session{}, models.User{}, false
 	}
+	return s.sessionFromToken(token)
+}
 
+func (s *Server) sessionFromToken(token string) (models.Session, models.User, bool) {
 	var session models.Session
-	err = s.db.Preload("User").Where("token_hash = ? AND expires_at > ?", hashToken(token), time.Now().UTC()).First(&session).Error
-	if err != nil {
+	if err := s.db.Preload("User").Where("token_hash = ? AND expires_at > ?", hashToken(token), time.Now().UTC()).First(&session).Error; err != nil {
 		return models.Session{}, models.User{}, false
 	}
-
 	return session, session.User, true
+}
+
+func (s *Server) appSessionFromCookie(c *gin.Context, app models.App) (models.Session, models.User, bool) {
+	if session, user, ok := s.sessionFromCookieName(c, s.appSessionCookieName(app.ID)); ok {
+		if session.AppID == app.ID {
+			return session, user, true
+		}
+	}
+
+	session, user, ok := s.sessionFromCookieName(c, s.cfg.SessionCookieName)
+	if ok && session.AppID == app.ID {
+		return session, user, true
+	}
+	return models.Session{}, models.User{}, false
+}
+
+func (s *Server) anyAppSessionFromCookie(c *gin.Context) (models.Session, models.User, bool) {
+	prefix := s.cfg.SessionCookieName + "_app_"
+	for _, cookie := range c.Request.Cookies() {
+		if !strings.HasPrefix(cookie.Name, prefix) || cookie.Value == "" {
+			continue
+		}
+		session, user, ok := s.sessionFromToken(cookie.Value)
+		if ok && session.AppID != adminSessionAppID {
+			return session, user, true
+		}
+	}
+	return models.Session{}, models.User{}, false
 }
 
 func (s *Server) requireAdminSession(c *gin.Context) (adminContext, bool) {
@@ -219,11 +267,24 @@ func (s *Server) requireWebAdmin() gin.HandlerFunc {
 }
 
 func (s *Server) adminSessionFromCookie(c *gin.Context) (adminContext, bool) {
-	session, user, ok := s.sessionFromCookie(c)
-	if !ok || session.AppID != adminSessionAppID {
+	session, user, ok := s.adminSessionFromCookieValue(c)
+	if !ok {
 		return adminContext{}, false
 	}
 	return adminContext{User: user, Session: session}, true
+}
+
+func (s *Server) adminSessionFromCookieValue(c *gin.Context) (models.Session, models.User, bool) {
+	session, user, ok := s.sessionFromCookieName(c, s.adminSessionCookieName())
+	if ok && session.AppID == adminSessionAppID {
+		return session, user, true
+	}
+
+	session, user, ok = s.sessionFromCookieName(c, s.cfg.SessionCookieName)
+	if ok && session.AppID == adminSessionAppID {
+		return session, user, true
+	}
+	return models.Session{}, models.User{}, false
 }
 
 func (s *Server) createSession(c *gin.Context, userID, appID uint) error {
@@ -249,7 +310,7 @@ func (s *Server) createSession(c *gin.Context, userID, appID uint) error {
 	}
 
 	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     s.cfg.SessionCookieName,
+		Name:     s.sessionCookieName(appID),
 		Value:    token,
 		Path:     "/",
 		Expires:  expiresAt,
@@ -262,14 +323,14 @@ func (s *Server) createSession(c *gin.Context, userID, appID uint) error {
 	return nil
 }
 
-func (s *Server) clearSessionCookie(c *gin.Context) {
+func (s *Server) clearSessionCookie(c *gin.Context, name string) {
 	sameSite := http.SameSiteLaxMode
 	if s.cfg.CookieSecure {
 		sameSite = http.SameSiteNoneMode
 	}
 
 	http.SetCookie(c.Writer, &http.Cookie{
-		Name:     s.cfg.SessionCookieName,
+		Name:     name,
 		Value:    "",
 		Path:     "/",
 		Expires:  time.Unix(0, 0),
@@ -281,11 +342,67 @@ func (s *Server) clearSessionCookie(c *gin.Context) {
 }
 
 func (s *Server) deleteSessionFromCookie(c *gin.Context) {
+	names := []string{s.cfg.SessionCookieName, s.adminSessionCookieName()}
+	prefix := s.cfg.SessionCookieName + "_app_"
+	for _, cookie := range c.Request.Cookies() {
+		if strings.HasPrefix(cookie.Name, prefix) {
+			names = append(names, cookie.Name)
+		}
+	}
+
+	seen := map[string]bool{}
+	for _, name := range names {
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		s.deleteSessionCookie(c, name)
+	}
+}
+
+func (s *Server) deleteAdminSessionFromCookie(c *gin.Context) {
+	s.deleteSessionCookie(c, s.adminSessionCookieName())
+	s.deleteLegacySessionCookieIfAppID(c, adminSessionAppID)
+}
+
+func (s *Server) deleteAppSessionFromCookie(c *gin.Context, app models.App) {
+	s.deleteSessionCookie(c, s.appSessionCookieName(app.ID))
+	s.deleteLegacySessionCookieIfAppID(c, app.ID)
+}
+
+func (s *Server) deleteLegacySessionCookieIfAppID(c *gin.Context, appID uint) {
 	token, err := c.Cookie(s.cfg.SessionCookieName)
+	if err != nil || token == "" {
+		return
+	}
+	session, _, ok := s.sessionFromToken(token)
+	if ok && session.AppID == appID {
+		s.db.Where("token_hash = ?", hashToken(token)).Delete(&models.Session{})
+		s.clearSessionCookie(c, s.cfg.SessionCookieName)
+	}
+}
+
+func (s *Server) deleteSessionCookie(c *gin.Context, name string) {
+	token, err := c.Cookie(name)
 	if err == nil && token != "" {
 		s.db.Where("token_hash = ?", hashToken(token)).Delete(&models.Session{})
 	}
-	s.clearSessionCookie(c)
+	s.clearSessionCookie(c, name)
+}
+
+func (s *Server) sessionCookieName(appID uint) string {
+	if appID == adminSessionAppID {
+		return s.adminSessionCookieName()
+	}
+	return s.appSessionCookieName(appID)
+}
+
+func (s *Server) adminSessionCookieName() string {
+	return s.cfg.SessionCookieName + "_admin"
+}
+
+func (s *Server) appSessionCookieName(appID uint) string {
+	return s.cfg.SessionCookieName + "_app_" + strconv.FormatUint(uint64(appID), 10)
 }
 
 func randomURLToken(size int) (string, error) {

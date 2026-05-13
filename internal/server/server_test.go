@@ -48,6 +48,7 @@ func TestMachineReadableDocsRender(t *testing.T) {
 	for _, expected := range []string{
 		"# ohmesh",
 		"Base URL: https://ohmesh.example.com",
+		"GET https://ohmesh.example.com/auth/me?app={app_slug}",
 		"POST https://ohmesh.example.com/api/apps/{app_slug}/records",
 		`credentials: "include"`,
 		"Machine-readable OpenAPI spec: https://ohmesh.example.com/openapi.json",
@@ -264,6 +265,75 @@ func TestNavigationReflectsLoginState(t *testing.T) {
 	}
 }
 
+func TestAdminSessionDoesNotOverwriteAppSession(t *testing.T) {
+	router, db := newTestRouter(t)
+
+	admin := models.User{Email: "admin@example.com", Name: "Admin"}
+	appUser := models.User{Email: "user@example.com", Name: "User"}
+	if err := db.Create(&admin).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&appUser).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	app := models.App{
+		OwnerID:            admin.ID,
+		Slug:               "notes",
+		Name:               "Notes",
+		DefaultRedirectURL: "https://example.com/notes",
+		Status:             models.AppStatusActive,
+	}
+	if err := db.Create(&app).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	adminToken := createTestSession(t, db, admin.ID, adminSessionAppID)
+	appToken := createTestSession(t, db, appUser.ID, app.ID)
+	adminCookie := &http.Cookie{Name: testSessionCookieName(adminSessionAppID), Value: adminToken}
+	appCookie := &http.Cookie{Name: testSessionCookieName(app.ID), Value: appToken}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/dashboard", nil)
+	req.AddCookie(adminCookie)
+	req.AddCookie(appCookie)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin dashboard should use admin cookie, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/apps/notes/records", bytes.NewBufferString(`{"type":"note","data":{"title":"Hello"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(adminCookie)
+	req.AddCookie(appCookie)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("app API should use app cookie even with admin cookie present, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/auth/me?app=notes", nil)
+	req.AddCookie(adminCookie)
+	req.AddCookie(appCookie)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("auth me should use requested app cookie, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `"slug":"notes"`) {
+		t.Fatalf("auth me should return app session: %s", rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/api/apps/notes/records", bytes.NewBufferString(`{"type":"note","data":{"title":"Blocked"}}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(adminCookie)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("app API should not accept admin cookie as app session, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func navLinksHTML(t *testing.T, body string) string {
 	t.Helper()
 
@@ -407,7 +477,7 @@ func TestAppLogoutURLUsesAppLogoutFlow(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/logout?app=notes&redirect_url=https://example.com/notes/dashboard", nil)
-	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName(app.ID), Value: token})
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("app logout URL expected 303, got %d: %s", rec.Code, rec.Body.String())
@@ -424,7 +494,7 @@ func TestAppLogoutURLUsesAppLogoutFlow(t *testing.T) {
 	token = createTestSession(t, db, user.ID, app.ID)
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/logout?app=notes&redirect_url=https://evil.example/dashboard", nil)
-	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName(app.ID), Value: token})
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("unregistered redirect expected 400, got %d: %s", rec.Code, rec.Body.String())
@@ -436,7 +506,7 @@ func TestAppLogoutURLUsesAppLogoutFlow(t *testing.T) {
 
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/auth/logout?app=notes&redirect_url=https://example.com/notes", nil)
-	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName(app.ID), Value: token})
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("app logout expected 303, got %d: %s", rec.Code, rec.Body.String())
@@ -452,7 +522,7 @@ func TestAppLogoutURLUsesAppLogoutFlow(t *testing.T) {
 	token = createTestSession(t, db, user.ID, app.ID)
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/auth/logout?app=notes&redirect_url=https://evil.example/dashboard", nil)
-	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName(app.ID), Value: token})
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("unregistered logout redirect expected 400, got %d: %s", rec.Code, rec.Body.String())
@@ -464,7 +534,7 @@ func TestAppLogoutURLUsesAppLogoutFlow(t *testing.T) {
 
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
-	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName(app.ID), Value: token})
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("API logout expected 204, got %d: %s", rec.Code, rec.Body.String())
@@ -486,7 +556,7 @@ func TestWebLogoutClearsSession(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/logout", nil)
-	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	req.AddCookie(&http.Cookie{Name: testSessionCookieName(adminSessionAppID), Value: token})
 	router.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusSeeOther {
@@ -664,4 +734,11 @@ func createTestSession(t *testing.T, db *gorm.DB, userID, appID uint) string {
 		t.Fatal(err)
 	}
 	return token
+}
+
+func testSessionCookieName(appID uint) string {
+	if appID == adminSessionAppID {
+		return "ohmesh_session_admin"
+	}
+	return "ohmesh_session_app_" + strconv.FormatUint(uint64(appID), 10)
 }

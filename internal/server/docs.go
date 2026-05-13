@@ -22,16 +22,16 @@ Base URL: `+baseURL+`
 1. Register an app in the ohmesh admin UI and keep its app slug.
 2. Send the user to:
    GET `+baseURL+`/login?app={app_slug}&redirect_url={encoded_app_url}
-3. After OAuth succeeds, ohmesh redirects back to the registered redirect URL and sets the HttpOnly cookie named `+s.cfg.SessionCookieName+`.
+3. After OAuth succeeds, ohmesh redirects back to the registered redirect URL and sets an app-specific HttpOnly session cookie.
 4. Browser API calls must use credentials: "include" so the cookie is sent.
 5. Data records are always scoped to the current session user and app.
 
 ## Check Login
 
-GET `+baseURL+`/auth/me
+GET `+baseURL+`/auth/me?app={app_slug}
 
 JavaScript:
-fetch("`+baseURL+`/auth/me", {
+fetch("`+baseURL+`/auth/me?app={app_slug}", {
   credentials: "include"
 })
 
@@ -41,7 +41,7 @@ If the user is logged in, the response includes user, app, and session.expires_a
 
 POST `+baseURL+`/api/apps/{app_slug}/records
 Content-Type: application/json
-Cookie auth: `+s.cfg.SessionCookieName+`
+Cookie auth: sent automatically by the browser with credentials: "include"
 
 Body:
 {
@@ -86,7 +86,7 @@ POST `+baseURL+`/auth/logout?app={app_slug}&redirect_url={encoded_app_url}
 ## Constraints
 
 - redirect_url must be registered for the app.
-- API requests require the ohmesh session cookie.
+- API requests require the app-specific ohmesh session cookie.
 - Never expect OAuth access tokens, refresh tokens, or raw session tokens in API responses.
 - data must be valid JSON.
 - type is required and must be 120 characters or less.
@@ -151,6 +151,9 @@ func (s *Server) openapiJSON(c *gin.Context) {
 					"operationId": "getCurrentSession",
 					"summary":     "Get current authenticated user and app session",
 					"security":    []gin.H{{"cookieAuth": []string{}}},
+					"parameters": []gin.H{
+						queryParam("app", "Registered app slug. Recommended for app clients so ohmesh can choose the correct app session cookie.", false),
+					},
 					"responses": gin.H{
 						"200": jsonResponse("Current session.", "MeResponse"),
 						"401": errorResponse("Login required."),
@@ -257,9 +260,10 @@ func (s *Server) openapiJSON(c *gin.Context) {
 		"components": gin.H{
 			"securitySchemes": gin.H{
 				"cookieAuth": gin.H{
-					"type": "apiKey",
-					"in":   "cookie",
-					"name": s.cfg.SessionCookieName,
+					"type":        "apiKey",
+					"in":          "cookie",
+					"name":        s.cfg.SessionCookieName + "_app_<app_id>",
+					"description": "ohmesh sets app-specific HttpOnly cookies for app sessions and a separate admin cookie for ohmesh admin sessions.",
 				},
 			},
 			"schemas": gin.H{

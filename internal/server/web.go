@@ -115,7 +115,7 @@ func (s *Server) loginPage(c *gin.Context) {
 
 func (s *Server) adminLoginPage(c *gin.Context) {
 	next := safeAdminPath(c.Query("next"))
-	if session, _, ok := s.sessionFromCookie(c); ok && session.AppID == adminSessionAppID {
+	if _, ok := s.adminSessionFromCookie(c); ok {
 		c.Redirect(http.StatusSeeOther, next)
 		return
 	}
@@ -143,7 +143,7 @@ func (s *Server) appLoginPage(c *gin.Context) {
 		return
 	}
 
-	if session, _, ok := s.sessionFromCookie(c); ok && session.AppID == app.ID {
+	if _, _, ok := s.appSessionFromCookie(c, app); ok {
 		c.Redirect(http.StatusSeeOther, appendQuery(redirectURL, "ohmesh_login", "success"))
 		return
 	}
@@ -164,14 +164,14 @@ func (s *Server) appLoginPage(c *gin.Context) {
 }
 
 func (s *Server) logoutPage(c *gin.Context) {
-	_, redirectURL, err := s.resolveOAuthStartParams(c.Query("app"), c.Query("redirect_url"))
+	app, redirectURL, err := s.resolveOAuthStartParams(c.Query("app"), c.Query("redirect_url"))
 	if err != nil {
 		status, message := oauthStartErrorStatus(err)
 		s.renderErrorPage(c, status, "로그아웃 링크를 확인해주세요", message)
 		return
 	}
 
-	s.deleteSessionFromCookie(c)
+	s.deleteAppSessionFromCookie(c, app)
 	c.Redirect(http.StatusSeeOther, appendQuery(redirectURL, "ohmesh_logout", "success"))
 }
 
@@ -236,7 +236,7 @@ func (s *Server) dashboardPage(c *gin.Context) {
 }
 
 func (s *Server) webLogout(c *gin.Context) {
-	s.deleteSessionFromCookie(c)
+	s.deleteAdminSessionFromCookie(c)
 	redirectWithNotice(c, "/", "로그아웃했습니다.")
 }
 
@@ -672,7 +672,7 @@ Registered redirect URL: ` + redirectURL + `
 Machine-readable API guide: ` + baseURL + `/llms.txt
 OpenAPI spec: ` + baseURL + `/openapi.json
 
-Build the app so the user never handles tokens directly. ohmesh uses an HttpOnly cookie named "ohmesh_session". All browser fetch calls to ohmesh must include:
+Build the app so the user never handles tokens directly. ohmesh uses an app-specific HttpOnly session cookie. All browser fetch calls to ohmesh must include:
 
 credentials: "include"
 
@@ -681,7 +681,7 @@ Authentication flow:
    ` + baseURL + `/login?app=` + app.Slug + `&redirect_url={encodeURIComponent(current_app_url)}
 2. Use the current page URL, without the hash fragment, as redirect_url. It must be inside the app's registered redirect URL.
 3. After login, call:
-   GET ` + baseURL + `/auth/me
+   GET ` + baseURL + `/auth/me?app=` + app.Slug + `
    with credentials: "include".
 4. If /auth/me returns 401, show the logged-out state. If it returns 200, show the authenticated app UI.
 

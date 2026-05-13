@@ -48,6 +48,7 @@ func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 
 	router.GET("/", s.homePage)
 	router.GET("/login", s.loginPage)
+	router.GET("/logout", s.logoutPage)
 	router.GET("/dashboard", s.requireWebAdmin(), s.dashboardPage)
 	router.POST("/logout", s.webLogout)
 	router.GET("/healthz", s.health)
@@ -260,6 +261,11 @@ func (s *Server) createSession(c *gin.Context, userID, appID uint) error {
 }
 
 func (s *Server) clearSessionCookie(c *gin.Context) {
+	sameSite := http.SameSiteLaxMode
+	if s.cfg.CookieSecure {
+		sameSite = http.SameSiteNoneMode
+	}
+
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     s.cfg.SessionCookieName,
 		Value:    "",
@@ -268,8 +274,16 @@ func (s *Server) clearSessionCookie(c *gin.Context) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   s.cfg.CookieSecure,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSite,
 	})
+}
+
+func (s *Server) deleteSessionFromCookie(c *gin.Context) {
+	token, err := c.Cookie(s.cfg.SessionCookieName)
+	if err == nil && token != "" {
+		s.db.Where("token_hash = ?", hashToken(token)).Delete(&models.Session{})
+	}
+	s.clearSessionCookie(c)
 }
 
 func randomURLToken(size int) (string, error) {

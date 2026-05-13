@@ -311,12 +311,20 @@ func (s *Server) me(c *gin.Context) {
 }
 
 func (s *Server) logout(c *gin.Context) {
-	token, err := c.Cookie(s.cfg.SessionCookieName)
-	if err == nil && token != "" {
-		s.db.Where("token_hash = ?", hashToken(token)).Delete(&models.Session{})
+	if strings.TrimSpace(c.Query("app")) != "" {
+		_, redirectURL, err := s.resolveOAuthStartParams(c.Query("app"), c.Query("redirect_url"))
+		if err != nil {
+			status, message := oauthStartErrorStatus(err)
+			respondError(c, status, message)
+			return
+		}
+
+		s.deleteSessionFromCookie(c)
+		c.Redirect(http.StatusSeeOther, appendQuery(redirectURL, "ohmesh_logout", "success"))
+		return
 	}
 
-	s.clearSessionCookie(c)
+	s.deleteSessionFromCookie(c)
 	c.Status(http.StatusNoContent)
 }
 

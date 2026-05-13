@@ -53,12 +53,10 @@ func mustTemplates() *template.Template {
 			return string(data)
 		},
 		"appLoginPageURL": func(app models.App) string {
-			values := url.Values{}
-			values.Set("app", app.Slug)
-			if app.DefaultRedirectURL != "" {
-				values.Set("redirect_url", app.DefaultRedirectURL)
-			}
-			return "/login?" + values.Encode()
+			return appPublicPageURL("/login", app)
+		},
+		"appLogoutPageURL": func(app models.App) string {
+			return appPublicPageURL("/logout", app)
 		},
 	}
 
@@ -165,6 +163,24 @@ func (s *Server) appLoginPage(c *gin.Context) {
 	})
 }
 
+func (s *Server) logoutPage(c *gin.Context) {
+	app, redirectURL, err := s.resolveOAuthStartParams(c.Query("app"), c.Query("redirect_url"))
+	if err != nil {
+		status, message := oauthStartErrorStatus(err)
+		s.renderErrorPage(c, status, "로그아웃 링크를 확인해주세요", message)
+		return
+	}
+
+	s.render(c, http.StatusOK, "logout.tmpl", gin.H{
+		"Title":             app.Name + " Logout",
+		"LogoutHeading":     app.Name + " 로그아웃",
+		"LogoutDescription": "쉬운 인증 서비스 ohmesh에서 " + app.Name + " 세션을 종료합니다.",
+		"LogoutActionURL":   appOAuthLoginURL("/auth/logout", app.Slug, redirectURL),
+		"RedirectURL":       redirectURL,
+		"App":               app,
+	})
+}
+
 func (s *Server) loginProviders(githubLoginURL, googleLoginURL string) []loginProvider {
 	providers := make([]loginProvider, 0, 2)
 	if s.cfg.GitHubClientID != "" && s.cfg.GitHubClientSecret != "" {
@@ -226,12 +242,7 @@ func (s *Server) dashboardPage(c *gin.Context) {
 }
 
 func (s *Server) webLogout(c *gin.Context) {
-	token, err := c.Cookie(s.cfg.SessionCookieName)
-	if err == nil && token != "" {
-		s.db.Where("token_hash = ?", hashToken(token)).Delete(&models.Session{})
-	}
-
-	s.clearSessionCookie(c)
+	s.deleteSessionFromCookie(c)
 	redirectWithNotice(c, "/", "로그아웃했습니다.")
 }
 
@@ -638,6 +649,15 @@ func adminOAuthLoginURL(path, redirectURL string) string {
 	values := url.Values{}
 	values.Set("admin", "1")
 	values.Set("redirect_url", redirectURL)
+	return path + "?" + values.Encode()
+}
+
+func appPublicPageURL(path string, app models.App) string {
+	values := url.Values{}
+	values.Set("app", app.Slug)
+	if app.DefaultRedirectURL != "" {
+		values.Set("redirect_url", app.DefaultRedirectURL)
+	}
 	return path + "?" + values.Encode()
 }
 

@@ -1,0 +1,19 @@
+{{define "logout.tmpl"}}
+{{template "shell_start" .}}
+<div class="row">
+  <div>
+    <h1>{{.LogoutHeading}}</h1>
+    <p class="muted">{{.LogoutDescription}}</p>
+  </div>
+</div>
+
+<section class="login-shell">
+  <div class="panel login-card">
+    <form method="post" action="{{.LogoutActionURL}}">
+      <button class="danger login-provider" type="submit">로그아웃</button>
+    </form>
+    <a class="button secondary login-provider" href="{{.RedirectURL}}">돌아가기</a>
+  </div>
+</section>
+{{template "shell_end" .}}
+{{end}}

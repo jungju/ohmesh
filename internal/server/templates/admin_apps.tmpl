@@ -80,6 +80,7 @@
         <p class="muted"><code>{{.Slug}}</code></p>
       </div>
       <div class="inline-actions">
+        <button class="secondary" type="button" data-dialog-open="run-prompt-dialog">실행 프롬프트</button>
         <a class="button secondary" href="{{appLoginPageURL .}}" target="_blank" rel="noopener">로그인 페이지</a>
         <a class="button secondary" href="{{appLogoutPageURL .}}" target="_blank" rel="noopener">로그아웃 페이지</a>
       </div>
@@ -148,6 +149,33 @@
     </div>
   </div>
 </section>
+
+<dialog id="run-prompt-dialog" class="modal-dialog wide-dialog" aria-labelledby="run-prompt-title">
+  <div class="modal-header">
+    <div>
+      <h2 id="run-prompt-title">실행 프롬프트</h2>
+      <p class="muted">Codex나 Claude에 그대로 전달해 이 앱의 ohmesh 연동을 실행하세요.</p>
+    </div>
+    <form method="dialog">
+      <button class="icon-button" type="submit" aria-label="닫기" title="닫기">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 6 6 18"></path>
+          <path d="m6 6 12 12"></path>
+        </svg>
+      </button>
+    </form>
+  </div>
+  <div class="modal-form prompt-body">
+    <label for="run-prompt-text">
+      English prompt
+      <textarea id="run-prompt-text" class="prompt-textarea" readonly>{{$.RunPrompt}}</textarea>
+    </label>
+    <div class="inline-actions modal-actions">
+      <button type="button" data-copy-target="run-prompt-text">Copy prompt</button>
+      <button class="secondary" type="button" data-dialog-close="run-prompt-dialog">닫기</button>
+    </div>
+  </div>
+</dialog>
 
 <section class="plain-panel danger-zone section">
   <div class="row">
@@ -308,19 +336,43 @@
 {{end}}
 <script>
   (() => {
-    const dialog = document.getElementById("add-app-dialog");
-    if (!dialog) return;
-
-    document.querySelectorAll("[data-dialog-open='add-app-dialog']").forEach((button) => {
+    document.querySelectorAll("[data-dialog-open]").forEach((button) => {
+      const dialog = document.getElementById(button.dataset.dialogOpen);
+      if (!dialog) return;
       button.addEventListener("click", () => dialog.showModal());
     });
 
-    document.querySelectorAll("[data-dialog-close='add-app-dialog']").forEach((button) => {
+    document.querySelectorAll("[data-dialog-close]").forEach((button) => {
+      const dialog = document.getElementById(button.dataset.dialogClose);
+      if (!dialog) return;
       button.addEventListener("click", () => dialog.close());
     });
 
-    dialog.addEventListener("click", (event) => {
-      if (event.target === dialog) dialog.close();
+    document.querySelectorAll("dialog.modal-dialog").forEach((dialog) => {
+      dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) dialog.close();
+      });
+    });
+
+    document.querySelectorAll("[data-copy-target]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const target = document.getElementById(button.dataset.copyTarget);
+        if (!target) return;
+        const value = "value" in target ? target.value : target.textContent;
+        try {
+          if (!navigator.clipboard) throw new Error("clipboard unavailable");
+          await navigator.clipboard.writeText(value);
+        } catch {
+          target.focus();
+          target.select();
+          document.execCommand("copy");
+        }
+        const label = button.textContent;
+        button.textContent = "Copied";
+        window.setTimeout(() => {
+          button.textContent = label;
+        }, 1400);
+      });
     });
   })();
 </script>

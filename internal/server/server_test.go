@@ -180,11 +180,28 @@ func TestWebPagesRender(t *testing.T) {
 	if strings.Contains(body, `<details class="add-app"`) {
 		t.Fatalf("admin apps should not render add app disclosure: %s", body)
 	}
+	if !strings.Contains(body, `data-dialog-open="run-prompt-dialog"`) {
+		t.Fatalf("admin apps should render run prompt button: %s", body)
+	}
+	if !strings.Contains(body, `<dialog id="run-prompt-dialog"`) {
+		t.Fatalf("admin apps should render run prompt dialog: %s", body)
+	}
 	if !strings.Contains(body, `href="/login?app=notes&amp;redirect_url=https%3A%2F%2Fexample.com%2Fnotes"`) {
 		t.Fatalf("admin apps should link to selected app login page: %s", body)
 	}
 	if !strings.Contains(body, `href="/logout?app=notes&amp;redirect_url=https%3A%2F%2Fexample.com%2Fnotes"`) {
 		t.Fatalf("admin apps should link to selected app logout page: %s", body)
+	}
+	for _, expected := range []string{
+		"Integrate ohmesh as this app&#39;s authentication service",
+		"App slug: notes",
+		"Registered redirect URL: https://example.com/notes",
+		"POST http://example.com/api/apps/notes/records",
+		"OpenAPI spec: http://example.com/openapi.json",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("admin apps run prompt missing %q: %s", expected, body)
+		}
 	}
 }
 

@@ -542,6 +542,7 @@ func (s *Server) renderAppManager(c *gin.Context, status int, errorMessage, sele
 			data["Users"] = users
 			data["RecordUsers"] = recordUsers
 			data["Records"] = records
+			data["RunPrompt"] = appRunPrompt(docsBaseURL(c), app)
 		} else if errorMessage == "" {
 			data["Error"] = "선택한 앱을 찾을 수 없습니다."
 		}
@@ -659,6 +660,77 @@ func appPublicPageURL(path string, app models.App) string {
 		values.Set("redirect_url", app.DefaultRedirectURL)
 	}
 	return path + "?" + values.Encode()
+}
+
+func appRunPrompt(baseURL string, app models.App) string {
+	redirectURL := app.DefaultRedirectURL
+	if redirectURL == "" {
+		redirectURL = "TODO: replace with this app's registered redirect URL"
+	}
+
+	return `You are working on the frontend app "` + app.Name + `".
+Integrate ohmesh as this app's authentication service and user-scoped JSON storage API.
+
+ohmesh base URL: ` + baseURL + `
+App slug: ` + app.Slug + `
+App name: ` + app.Name + `
+Registered redirect URL: ` + redirectURL + `
+Machine-readable API guide: ` + baseURL + `/llms.txt
+OpenAPI spec: ` + baseURL + `/openapi.json
+
+Build the app so the user never handles tokens directly. ohmesh uses an HttpOnly cookie named "ohmesh_session". All browser fetch calls to ohmesh must include:
+
+credentials: "include"
+
+Authentication flow:
+1. Add a login action that redirects the browser to:
+   ` + baseURL + `/login?app=` + app.Slug + `&redirect_url={encodeURIComponent(current_app_url)}
+2. Use the current page URL, without the hash fragment, as redirect_url. It must be inside the app's registered redirect URL.
+3. After login, call:
+   GET ` + baseURL + `/auth/me
+   with credentials: "include".
+4. If /auth/me returns 401, show the logged-out state. If it returns 200, show the authenticated app UI.
+
+JSON record storage:
+- Create a record:
+  POST ` + baseURL + `/api/apps/` + app.Slug + `/records
+  Content-Type: application/json
+  credentials: "include"
+  Body:
+  {
+    "type": "note",
+    "data": {
+      "title": "Hello",
+      "done": false
+    }
+  }
+
+- List records:
+  GET ` + baseURL + `/api/apps/` + app.Slug + `/records?type=note&limit=100&offset=0
+
+- Read one record:
+  GET ` + baseURL + `/api/apps/` + app.Slug + `/records/{id}
+
+- Update a record:
+  PATCH ` + baseURL + `/api/apps/` + app.Slug + `/records/{id}
+  Body may include "type", "data", or both.
+
+- Delete a record:
+  DELETE ` + baseURL + `/api/apps/` + app.Slug + `/records/{id}
+
+Logout flow:
+- Add a logout action that sends the user to:
+  ` + baseURL + `/logout?app=` + app.Slug + `&redirect_url={encodeURIComponent(current_app_url)}
+
+Important constraints:
+- Do not use localStorage or visible tokens for ohmesh authentication.
+- Do not expect OAuth access tokens, refresh tokens, or raw session tokens in any API response.
+- Every data record is scoped to the current authenticated user and this app.
+- The "data" field can be any valid JSON value.
+- The "type" field is required and must be 120 characters or less.
+- Handle 401 by asking the user to log in again.
+- Handle 403 as a wrong-app session.
+- Keep the integration small and clear, using this app's existing UI and code style.`
 }
 
 func appOAuthLoginURL(path, appSlug, redirectURL string) string {

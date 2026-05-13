@@ -332,6 +332,9 @@
       color: var(--text);
       overflow: auto;
     }
+    .modal-dialog.wide-dialog {
+      width: min(920px, calc(100vw - 32px));
+    }
     .modal-dialog::backdrop {
       background: rgba(23, 32, 42, 0.36);
       backdrop-filter: blur(2px);
@@ -349,6 +352,15 @@
     .modal-actions {
       justify-content: flex-end;
       margin-top: 4px;
+    }
+    .prompt-body {
+      display: grid;
+      gap: 14px;
+    }
+    .prompt-textarea {
+      min-height: 460px;
+      line-height: 1.5;
+      resize: vertical;
     }
     .danger-zone {
       border-color: #efb4ad;

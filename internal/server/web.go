@@ -158,7 +158,7 @@ func (s *Server) appLoginPage(c *gin.Context) {
 	s.render(c, http.StatusOK, "login.tmpl", gin.H{
 		"Title":            app.Name + " Login",
 		"LoginHeading":     app.Name + " 로그인",
-		"LoginDescription": "ohmesh를 통해 " + app.Name + "에 로그인합니다.",
+		"LoginDescription": "쉬운 인증 서비스 ohmesh를 통해 " + app.Name + "에 로그인합니다.",
 		"Providers":        providers,
 		"App":              app,
 		"RedirectURL":      redirectURL,

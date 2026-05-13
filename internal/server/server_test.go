@@ -229,6 +229,9 @@ func TestAppLoginPageUsesAppOAuthFlow(t *testing.T) {
 	if !strings.Contains(body, "Notes 로그인") {
 		t.Fatalf("app login page should show app name: %s", body)
 	}
+	if !strings.Contains(body, "쉬운 인증 서비스 ohmesh를 통해 Notes에 로그인합니다.") {
+		t.Fatalf("app login page should show ohmesh marketing copy: %s", body)
+	}
 	if !strings.Contains(body, `/auth/github/login?app=notes&amp;redirect_url=https%3A%2F%2Fexample.com%2Fnotes%2Fdashboard`) {
 		t.Fatalf("app login page should link GitHub app OAuth flow: %s", body)
 	}

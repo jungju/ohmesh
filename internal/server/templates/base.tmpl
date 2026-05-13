@@ -462,8 +462,7 @@
           <a href="/dashboard" {{if .DashboardNavActive}}class="active"{{end}}>대시보드</a>
           <a href="/admin/apps" {{if .AdminNavActive}}class="active"{{end}}>앱 관리</a>
         {{else}}
-          <a href="/login" {{if and (eq .CurrentPath "/login") (not .AdminNavActive)}}class="active"{{end}}>로그인</a>
-          <a href="/login?next=%2Fadmin%2Fapps" {{if .AdminNavActive}}class="active"{{end}}>앱 관리</a>
+          <a href="/login" {{if eq .CurrentPath "/login"}}class="active"{{end}}>로그인</a>
         {{end}}
         {{if .IsLoggedIn}}
           <form class="nav-logout" method="post" action="/logout">

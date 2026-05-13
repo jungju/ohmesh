@@ -124,15 +124,15 @@ func TestNavigationReflectsLoginState(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	body := rec.Body.String()
-	if !strings.Contains(body, `href="/login"`) {
-		t.Fatalf("logged-out nav should include login: %s", body)
+	nav := navLinksHTML(t, rec.Body.String())
+	if !strings.Contains(nav, `href="/login"`) {
+		t.Fatalf("logged-out nav should include login: %s", nav)
 	}
-	if !strings.Contains(body, `href="/login?next=%2Fadmin%2Fapps"`) {
-		t.Fatalf("logged-out nav should include app management login link: %s", body)
+	if strings.Contains(nav, `href="/admin/apps"`) || strings.Contains(nav, `href="/login?next=%2Fadmin%2Fapps"`) {
+		t.Fatalf("logged-out nav should hide app management: %s", nav)
 	}
-	if strings.Contains(body, `aria-label="로그아웃"`) {
-		t.Fatalf("logged-out nav should not include logout: %s", body)
+	if strings.Contains(nav, `aria-label="로그아웃"`) {
+		t.Fatalf("logged-out nav should not include logout: %s", nav)
 	}
 
 	rec = httptest.NewRecorder()
@@ -142,18 +142,18 @@ func TestNavigationReflectsLoginState(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	body = rec.Body.String()
-	if strings.Contains(body, `href="/login"`) {
-		t.Fatalf("logged-in nav should hide login: %s", body)
+	nav = navLinksHTML(t, rec.Body.String())
+	if strings.Contains(nav, `href="/login"`) {
+		t.Fatalf("logged-in nav should hide login: %s", nav)
 	}
-	if !strings.Contains(body, `href="/dashboard"`) {
-		t.Fatalf("logged-in nav should include dashboard: %s", body)
+	if !strings.Contains(nav, `href="/dashboard"`) {
+		t.Fatalf("logged-in nav should include dashboard: %s", nav)
 	}
-	if !strings.Contains(body, `href="/admin/apps"`) {
-		t.Fatalf("logged-in nav should include app management: %s", body)
+	if !strings.Contains(nav, `href="/admin/apps"`) {
+		t.Fatalf("logged-in nav should include app management: %s", nav)
 	}
-	if !strings.Contains(body, `aria-label="로그아웃"`) {
-		t.Fatalf("logged-in nav should include icon logout: %s", body)
+	if !strings.Contains(nav, `aria-label="로그아웃"`) {
+		t.Fatalf("logged-in nav should include icon logout: %s", nav)
 	}
 
 	rec = httptest.NewRecorder()
@@ -166,6 +166,21 @@ func TestNavigationReflectsLoginState(t *testing.T) {
 	if location := rec.Header().Get("Location"); location != "/dashboard" {
 		t.Fatalf("logged-in login page should redirect to dashboard, got %q", location)
 	}
+}
+
+func navLinksHTML(t *testing.T, body string) string {
+	t.Helper()
+
+	start := strings.Index(body, `<div class="navlinks">`)
+	if start == -1 {
+		t.Fatalf("rendered page did not include navlinks: %s", body)
+	}
+	rest := body[start:]
+	end := strings.Index(rest, `</div>`)
+	if end == -1 {
+		t.Fatalf("rendered page did not close navlinks: %s", body)
+	}
+	return rest[:end]
 }
 
 func TestAppLoginPageUsesAppOAuthFlow(t *testing.T) {

@@ -189,8 +189,8 @@ func TestWebPagesRender(t *testing.T) {
 	if !strings.Contains(body, `href="/login?app=notes&amp;redirect_url=https%3A%2F%2Fexample.com%2Fnotes"`) {
 		t.Fatalf("admin apps should link to selected app login page: %s", body)
 	}
-	if !strings.Contains(body, `href="/logout?app=notes&amp;redirect_url=https%3A%2F%2Fexample.com%2Fnotes"`) {
-		t.Fatalf("admin apps should link to selected app logout page: %s", body)
+	if !strings.Contains(body, `data-copy-value="/logout?app=notes&amp;redirect_url=https%3A%2F%2Fexample.com%2Fnotes"`) {
+		t.Fatalf("admin apps should provide selected app logout URL copy button: %s", body)
 	}
 	for _, expected := range []string{
 		"Integrate ohmesh as this app&#39;s authentication service",
@@ -381,7 +381,7 @@ func TestLoginPageHidesUnconfiguredProviders(t *testing.T) {
 	}
 }
 
-func TestAppLogoutPageUsesAppLogoutFlow(t *testing.T) {
+func TestAppLogoutURLUsesAppLogoutFlow(t *testing.T) {
 	router, db := newTestRouter(t)
 
 	owner := models.User{Email: "owner@example.com", Name: "Owner"}
@@ -399,35 +399,41 @@ func TestAppLogoutPageUsesAppLogoutFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/logout?app=notes&redirect_url=https://example.com/notes/dashboard", nil)
-	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Notes 로그아웃") {
-		t.Fatalf("app logout page should show app name: %s", body)
-	}
-	if !strings.Contains(body, "쉬운 인증 서비스 ohmesh에서 Notes 세션을 종료합니다.") {
-		t.Fatalf("app logout page should show ohmesh logout copy: %s", body)
-	}
-	if !strings.Contains(body, `action="/auth/logout?app=notes&amp;redirect_url=https%3A%2F%2Fexample.com%2Fnotes%2Fdashboard"`) {
-		t.Fatalf("app logout page should post to app logout flow: %s", body)
-	}
-
-	rec = httptest.NewRecorder()
-	req = httptest.NewRequest(http.MethodGet, "/logout?app=notes&redirect_url=https://evil.example/dashboard", nil)
-	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("unregistered redirect expected 400, got %d: %s", rec.Code, rec.Body.String())
-	}
-
 	user := models.User{Email: "user@example.com", Name: "User"}
 	if err := db.Create(&user).Error; err != nil {
 		t.Fatal(err)
 	}
 	token := createTestSession(t, db, user.ID, app.ID)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/logout?app=notes&redirect_url=https://example.com/notes/dashboard", nil)
+	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("app logout URL expected 303, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if location := rec.Header().Get("Location"); location != "https://example.com/notes/dashboard?ohmesh_logout=success" {
+		t.Fatalf("app logout URL should return to app, got %q", location)
+	}
+	var count int64
+	db.Model(&models.Session{}).Where("token_hash = ?", hashToken(token)).Count(&count)
+	if count != 0 {
+		t.Fatalf("expected app logout URL to delete session, found %d", count)
+	}
+
+	token = createTestSession(t, db, user.ID, app.ID)
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/logout?app=notes&redirect_url=https://evil.example/dashboard", nil)
+	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unregistered redirect expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	db.Model(&models.Session{}).Where("token_hash = ?", hashToken(token)).Count(&count)
+	if count != 1 {
+		t.Fatalf("invalid app logout URL should keep session, found %d", count)
+	}
+
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/auth/logout?app=notes&redirect_url=https://example.com/notes", nil)
 	req.AddCookie(&http.Cookie{Name: "ohmesh_session", Value: token})
@@ -438,7 +444,6 @@ func TestAppLogoutPageUsesAppLogoutFlow(t *testing.T) {
 	if location := rec.Header().Get("Location"); location != "https://example.com/notes?ohmesh_logout=success" {
 		t.Fatalf("app logout should return to app, got %q", location)
 	}
-	var count int64
 	db.Model(&models.Session{}).Where("token_hash = ?", hashToken(token)).Count(&count)
 	if count != 0 {
 		t.Fatalf("expected app logout to delete session, found %d", count)

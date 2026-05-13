@@ -77,7 +77,7 @@ Delete returns 204 No Content.
 
 ## Logout
 
-App logout page:
+App logout URL. This clears the ohmesh session cookie and redirects immediately:
 GET `+baseURL+`/logout?app={app_slug}&redirect_url={encoded_app_url}
 
 Programmatic app logout:
@@ -132,14 +132,14 @@ func (s *Server) openapiJSON(c *gin.Context) {
 			"/logout": gin.H{
 				"get": gin.H{
 					"tags":        []string{"Auth"},
-					"operationId": "showAppLogout",
-					"summary":     "Show app logout confirmation page",
+					"operationId": "logoutAppViaBrowser",
+					"summary":     "Clear the session and redirect back to the app",
 					"parameters": []gin.H{
 						queryParam("app", "Registered app slug.", true),
 						queryParam("redirect_url", "Registered URL to return to after logout.", true),
 					},
 					"responses": gin.H{
-						"200": gin.H{"description": "Logout confirmation page."},
+						"303": gin.H{"description": "Session cleared and redirected to app redirect_url with ohmesh_logout=success."},
 						"400": errorResponse("Invalid or unregistered redirect_url."),
 						"404": errorResponse("App not found."),
 					},

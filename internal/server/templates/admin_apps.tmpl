@@ -82,7 +82,7 @@
       <div class="inline-actions">
         <button class="secondary" type="button" data-dialog-open="run-prompt-dialog">실행 프롬프트</button>
         <a class="button secondary" href="{{appLoginPageURL .}}" target="_blank" rel="noopener">로그인 페이지</a>
-        <a class="button secondary" href="{{appLogoutPageURL .}}" target="_blank" rel="noopener">로그아웃 페이지</a>
+        <button class="secondary" type="button" data-copy-value="{{appLogoutPageURL .}}">로그아웃 URL 복사</button>
       </div>
     </div>
     <form method="post" action="/admin/apps/{{.Slug}}" class="form-grid">
@@ -354,18 +354,26 @@
       });
     });
 
-    document.querySelectorAll("[data-copy-target]").forEach((button) => {
+    document.querySelectorAll("[data-copy-target], [data-copy-value]").forEach((button) => {
       button.addEventListener("click", async () => {
-        const target = document.getElementById(button.dataset.copyTarget);
-        if (!target) return;
-        const value = "value" in target ? target.value : target.textContent;
+        const target = button.dataset.copyTarget ? document.getElementById(button.dataset.copyTarget) : null;
+        if (button.dataset.copyTarget && !target) return;
+        const value = button.dataset.copyValue || ("value" in target ? target.value : target.textContent);
         try {
           if (!navigator.clipboard) throw new Error("clipboard unavailable");
           await navigator.clipboard.writeText(value);
         } catch {
-          target.focus();
-          target.select();
+          const copySource = target || document.createElement("textarea");
+          if (!target) {
+            copySource.value = value;
+            copySource.style.position = "fixed";
+            copySource.style.opacity = "0";
+            document.body.appendChild(copySource);
+          }
+          copySource.focus();
+          if ("select" in copySource) copySource.select();
           document.execCommand("copy");
+          if (!target) copySource.remove();
         }
         const label = button.textContent;
         button.textContent = "Copied";

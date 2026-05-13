@@ -164,21 +164,15 @@ func (s *Server) appLoginPage(c *gin.Context) {
 }
 
 func (s *Server) logoutPage(c *gin.Context) {
-	app, redirectURL, err := s.resolveOAuthStartParams(c.Query("app"), c.Query("redirect_url"))
+	_, redirectURL, err := s.resolveOAuthStartParams(c.Query("app"), c.Query("redirect_url"))
 	if err != nil {
 		status, message := oauthStartErrorStatus(err)
 		s.renderErrorPage(c, status, "로그아웃 링크를 확인해주세요", message)
 		return
 	}
 
-	s.render(c, http.StatusOK, "logout.tmpl", gin.H{
-		"Title":             app.Name + " Logout",
-		"LogoutHeading":     app.Name + " 로그아웃",
-		"LogoutDescription": "쉬운 인증 서비스 ohmesh에서 " + app.Name + " 세션을 종료합니다.",
-		"LogoutActionURL":   appOAuthLoginURL("/auth/logout", app.Slug, redirectURL),
-		"RedirectURL":       redirectURL,
-		"App":               app,
-	})
+	s.deleteSessionFromCookie(c)
+	c.Redirect(http.StatusSeeOther, appendQuery(redirectURL, "ohmesh_logout", "success"))
 }
 
 func (s *Server) loginProviders(githubLoginURL, googleLoginURL string) []loginProvider {

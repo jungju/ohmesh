@@ -49,6 +49,8 @@ func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 	router.GET("/", s.homePage)
 	router.GET("/login", s.loginPage)
 	router.GET("/logout", s.logoutPage)
+	router.GET("/llms.txt", s.llmsText)
+	router.GET("/openapi.json", s.openapiJSON)
 	router.GET("/dashboard", s.requireWebAdmin(), s.dashboardPage)
 	router.POST("/logout", s.webLogout)
 	router.GET("/healthz", s.health)

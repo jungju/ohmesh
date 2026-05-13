@@ -30,6 +30,64 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestMachineReadableDocsRender(t *testing.T) {
+	router, _ := newTestRouter(t)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/llms.txt", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "ohmesh.example.com")
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("llms.txt expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if contentType := rec.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "text/plain") {
+		t.Fatalf("llms.txt should be text/plain, got %q", contentType)
+	}
+	body := rec.Body.String()
+	for _, expected := range []string{
+		"# ohmesh",
+		"Base URL: https://ohmesh.example.com",
+		"POST https://ohmesh.example.com/api/apps/{app_slug}/records",
+		`credentials: "include"`,
+		"Machine-readable OpenAPI spec: https://ohmesh.example.com/openapi.json",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Fatalf("llms.txt missing %q: %s", expected, body)
+		}
+	}
+
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/openapi.json", nil)
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Forwarded-Host", "ohmesh.example.com")
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("openapi.json expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if contentType := rec.Header().Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
+		t.Fatalf("openapi.json should be application/json, got %q", contentType)
+	}
+
+	var spec map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &spec); err != nil {
+		t.Fatalf("openapi.json should parse: %v", err)
+	}
+	if spec["openapi"] != "3.1.0" {
+		t.Fatalf("unexpected OpenAPI version: %#v", spec["openapi"])
+	}
+	paths, ok := spec["paths"].(map[string]any)
+	if !ok {
+		t.Fatalf("openapi.json missing paths: %#v", spec["paths"])
+	}
+	if _, ok := paths["/api/apps/{slug}/records"]; !ok {
+		t.Fatalf("openapi.json should describe record collection endpoint: %#v", paths)
+	}
+	if _, ok := paths["/auth/me"]; !ok {
+		t.Fatalf("openapi.json should describe auth session endpoint: %#v", paths)
+	}
+}
+
 func TestWebPagesRender(t *testing.T) {
 	router, db := newTestRouter(t)
 

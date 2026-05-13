@@ -11,6 +11,8 @@ LOG_FILE ?= $(TMP_DIR)/ohmesh.log
 GITHUB_OWNER ?= jungju
 IMAGE ?= ghcr.io/$(GITHUB_OWNER)/ohmesh:main
 K8S_NAMESPACE ?= ohmesh
+AIR ?= air
+AIR_INSTALL ?= github.com/air-verse/air@latest
 
 OHMESH_ADDR ?= :8081
 OHMESH_DATABASE_PATH ?= $(TMP_DIR)/ohmesh.db
@@ -31,7 +33,7 @@ export GITHUB_CLIENT_SECRET
 export GOOGLE_CLIENT_ID
 export GOOGLE_CLIENT_SECRET
 
-.PHONY: help env deps fmt test build check run start stop restart status logs health clean \
+.PHONY: help env deps fmt test build check install-air dev run start stop restart status logs health clean \
 	k8s-deploy k8s-status k8s-logs k8s-delete k8s-port-forward k8s-oauth-secret k8s-ghcr-secret package-watch
 
 help:
@@ -43,6 +45,8 @@ help:
 	@echo "  make test      Run Go tests"
 	@echo "  make build     Build $(BIN_DIR)/$(APP_NAME)"
 	@echo "  make check     Run fmt, test, and build"
+	@echo "  make install-air Install the Air live-reload tool"
+	@echo "  make dev       Run the API with Air live reload"
 	@echo "  make run       Run the API in the foreground"
 	@echo "  make start     Build and run the API in the background"
 	@echo "  make stop      Stop the background API"
@@ -81,6 +85,18 @@ build:
 	go build -o "$(BIN_DIR)/$(APP_NAME)" ./cmd/ohmesh
 
 check: fmt test build
+
+install-air:
+	go install "$(AIR_INSTALL)"
+
+dev: env
+	@mkdir -p "$(TMP_DIR)"
+	@if command -v "$(AIR)" >/dev/null 2>&1; then \
+		"$(AIR)" -c .air.toml; \
+	else \
+		echo "Air is not installed. Run: make install-air"; \
+		exit 1; \
+	fi
 
 run: env
 	@mkdir -p "$(TMP_DIR)"

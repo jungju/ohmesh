@@ -128,6 +128,9 @@ func TestNavigationReflectsLoginState(t *testing.T) {
 	if !strings.Contains(body, `href="/login"`) {
 		t.Fatalf("logged-out nav should include login: %s", body)
 	}
+	if !strings.Contains(body, `href="/login?next=%2Fadmin%2Fapps"`) {
+		t.Fatalf("logged-out nav should include app management login link: %s", body)
+	}
 	if strings.Contains(body, `aria-label="로그아웃"`) {
 		t.Fatalf("logged-out nav should not include logout: %s", body)
 	}
@@ -145,6 +148,9 @@ func TestNavigationReflectsLoginState(t *testing.T) {
 	}
 	if !strings.Contains(body, `href="/dashboard"`) {
 		t.Fatalf("logged-in nav should include dashboard: %s", body)
+	}
+	if !strings.Contains(body, `href="/admin/apps"`) {
+		t.Fatalf("logged-in nav should include app management: %s", body)
 	}
 	if !strings.Contains(body, `aria-label="로그아웃"`) {
 		t.Fatalf("logged-in nav should include icon logout: %s", body)

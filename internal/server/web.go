@@ -67,7 +67,7 @@ func (s *Server) render(c *gin.Context, status int, name string, data gin.H) {
 		data["CurrentPath"] = c.Request.URL.Path
 	}
 	if _, ok := data["AdminNavActive"]; !ok {
-		data["AdminNavActive"] = c.Request.URL.Path == "/admin" || strings.HasPrefix(c.Request.URL.Path, "/admin/")
+		data["AdminNavActive"] = adminNavActive(c)
 	}
 	if _, ok := data["DashboardNavActive"]; !ok {
 		data["DashboardNavActive"] = c.Request.URL.Path == "/dashboard"

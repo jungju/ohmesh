@@ -440,10 +440,11 @@
         <a href="/" {{if eq .CurrentPath "/"}}class="active"{{end}}>소개</a>
         {{if .IsLoggedIn}}
           <a href="/dashboard" {{if .DashboardNavActive}}class="active"{{end}}>대시보드</a>
+          <a href="/admin/apps" {{if .AdminNavActive}}class="active"{{end}}>앱 관리</a>
         {{else}}
-          <a href="/login" {{if eq .CurrentPath "/login"}}class="active"{{end}}>로그인</a>
+          <a href="/login" {{if and (eq .CurrentPath "/login") (not .AdminNavActive)}}class="active"{{end}}>로그인</a>
+          <a href="/login?next=%2Fadmin%2Fapps" {{if .AdminNavActive}}class="active"{{end}}>앱 관리</a>
         {{end}}
-        <a href="/admin/apps" {{if .AdminNavActive}}class="active"{{end}}>앱 관리</a>
         {{if .IsLoggedIn}}
           <form class="nav-logout" method="post" action="/logout">
             <button class="icon-button" type="submit" aria-label="로그아웃" title="로그아웃">

@@ -429,6 +429,18 @@ func safeAdminPath(raw string) string {
 	return parsed.RequestURI()
 }
 
+func adminNavActive(c *gin.Context) bool {
+	if c.Request.URL.Path == "/admin" || strings.HasPrefix(c.Request.URL.Path, "/admin/") {
+		return true
+	}
+	if c.Request.URL.Path != "/login" {
+		return false
+	}
+
+	next := safeAdminPath(c.Query("next"))
+	return next == "/admin" || strings.HasPrefix(next, "/admin/")
+}
+
 func absoluteAdminURL(c *gin.Context, rawPath string) string {
 	return callbackURL(c, safeAdminPath(rawPath))
 }

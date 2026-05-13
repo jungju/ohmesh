@@ -22,10 +22,8 @@ import (
 var templateFiles embed.FS
 
 type loginProvider struct {
-	Name          string
-	LoginURL      string
-	Enabled       bool
-	MissingConfig string
+	Name     string
+	LoginURL string
 }
 
 type appUserRow struct {
@@ -125,27 +123,15 @@ func (s *Server) adminLoginPage(c *gin.Context) {
 	}
 
 	redirectURL := absoluteAdminURL(c, next)
-	providers := []loginProvider{
-		{
-			Name:          "GitHub",
-			LoginURL:      adminOAuthLoginURL("/auth/github/login", redirectURL),
-			Enabled:       s.cfg.GitHubClientID != "" && s.cfg.GitHubClientSecret != "",
-			MissingConfig: "GITHUB_CLIENT_ID 또는 GITHUB_CLIENT_SECRET이 없습니다.",
-		},
-		{
-			Name:          "Google",
-			LoginURL:      adminOAuthLoginURL("/auth/google/login", redirectURL),
-			Enabled:       s.cfg.GoogleClientID != "" && s.cfg.GoogleClientSecret != "",
-			MissingConfig: "GOOGLE_CLIENT_ID 또는 GOOGLE_CLIENT_SECRET이 없습니다.",
-		},
-	}
+	providers := s.loginProviders(
+		adminOAuthLoginURL("/auth/github/login", redirectURL),
+		adminOAuthLoginURL("/auth/google/login", redirectURL),
+	)
 
 	s.render(c, http.StatusOK, "login.tmpl", gin.H{
 		"Title":            "Login",
 		"LoginHeading":     "ohmesh 로그인",
 		"LoginDescription": "내 앱과 사용자 데이터 관리를 위해 ohmesh에 로그인합니다.",
-		"InfoTitle":        "앱 관리",
-		"InfoText":         "로그인 후 앱 등록, 도메인 설정, 사용자 세션, JSON 레코드를 한 곳에서 관리합니다.",
 		"Providers":        providers,
 		"Next":             next,
 	})
@@ -164,31 +150,30 @@ func (s *Server) appLoginPage(c *gin.Context) {
 		return
 	}
 
-	providers := []loginProvider{
-		{
-			Name:          "GitHub",
-			LoginURL:      appOAuthLoginURL("/auth/github/login", app.Slug, redirectURL),
-			Enabled:       s.cfg.GitHubClientID != "" && s.cfg.GitHubClientSecret != "",
-			MissingConfig: "GITHUB_CLIENT_ID 또는 GITHUB_CLIENT_SECRET이 없습니다.",
-		},
-		{
-			Name:          "Google",
-			LoginURL:      appOAuthLoginURL("/auth/google/login", app.Slug, redirectURL),
-			Enabled:       s.cfg.GoogleClientID != "" && s.cfg.GoogleClientSecret != "",
-			MissingConfig: "GOOGLE_CLIENT_ID 또는 GOOGLE_CLIENT_SECRET이 없습니다.",
-		},
-	}
+	providers := s.loginProviders(
+		appOAuthLoginURL("/auth/github/login", app.Slug, redirectURL),
+		appOAuthLoginURL("/auth/google/login", app.Slug, redirectURL),
+	)
 
 	s.render(c, http.StatusOK, "login.tmpl", gin.H{
 		"Title":            app.Name + " Login",
 		"LoginHeading":     app.Name + " 로그인",
 		"LoginDescription": "ohmesh를 통해 " + app.Name + "에 로그인합니다.",
-		"InfoTitle":        "앱 로그인",
-		"InfoText":         "로그인 후 등록된 사용자 앱으로 돌아가고, 이후 API 요청은 ohmesh 세션 쿠키로 인증됩니다.",
 		"Providers":        providers,
 		"App":              app,
 		"RedirectURL":      redirectURL,
 	})
+}
+
+func (s *Server) loginProviders(githubLoginURL, googleLoginURL string) []loginProvider {
+	providers := make([]loginProvider, 0, 2)
+	if s.cfg.GitHubClientID != "" && s.cfg.GitHubClientSecret != "" {
+		providers = append(providers, loginProvider{Name: "GitHub", LoginURL: githubLoginURL})
+	}
+	if s.cfg.GoogleClientID != "" && s.cfg.GoogleClientSecret != "" {
+		providers = append(providers, loginProvider{Name: "Google", LoginURL: googleLoginURL})
+	}
+	return providers
 }
 
 func (s *Server) dashboardPage(c *gin.Context) {

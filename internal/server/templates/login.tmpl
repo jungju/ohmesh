@@ -9,36 +9,12 @@
 
 {{if .LoginError}}<div class="error">{{.LoginError}}</div>{{end}}
 
-<section class="two-col">
-  <div class="panel">
-    <h2>OAuth 로그인</h2>
-    <div class="stack">
-      {{range .Providers}}
-        <div class="plain-panel">
-          <div class="row">
-            <div>
-              <strong>{{.Name}}</strong>
-              {{if not .Enabled}}<br><span class="muted">{{.MissingConfig}}</span>{{end}}
-            </div>
-            {{if .Enabled}}
-              <a class="button" href="{{.LoginURL}}">{{.Name}}로 로그인</a>
-            {{else}}
-              <span class="button disabled">{{.Name}} 비활성</span>
-            {{end}}
-          </div>
-        </div>
-      {{end}}
-    </div>
-  </div>
-
-  <div class="plain-panel">
-    <h2>{{.InfoTitle}}</h2>
-    <p class="muted">{{.InfoText}}</p>
-    {{if .App}}
-      <p class="muted">앱 전용 ID <code>{{.App.Slug}}</code></p>
-    {{end}}
-    {{if .RedirectURL}}
-      <p class="muted">로그인 후 이동 <code>{{.RedirectURL}}</code></p>
+<section class="login-shell">
+  <div class="panel login-card">
+    {{range .Providers}}
+      <a class="button login-provider" href="{{.LoginURL}}">{{.Name}}로 로그인</a>
+    {{else}}
+      <div class="empty">사용 가능한 로그인 방법이 없습니다.</div>
     {{end}}
   </div>
 </section>

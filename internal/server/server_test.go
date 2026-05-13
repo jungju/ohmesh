@@ -229,11 +229,11 @@ func TestAppLoginPageUsesAppOAuthFlow(t *testing.T) {
 	if !strings.Contains(body, "Notes 로그인") {
 		t.Fatalf("app login page should show app name: %s", body)
 	}
-	if !strings.Contains(body, "앱 전용 ID") || !strings.Contains(body, "notes") {
-		t.Fatalf("app login page should show app id: %s", body)
-	}
 	if !strings.Contains(body, `/auth/github/login?app=notes&amp;redirect_url=https%3A%2F%2Fexample.com%2Fnotes%2Fdashboard`) {
 		t.Fatalf("app login page should link GitHub app OAuth flow: %s", body)
+	}
+	if strings.Contains(body, "앱 로그인") || strings.Contains(body, "로그인 후 이동") {
+		t.Fatalf("app login page should not show explanatory app panel: %s", body)
 	}
 	if strings.Contains(body, "admin=1") {
 		t.Fatalf("app login page should not use admin OAuth flow: %s", body)
@@ -260,6 +260,43 @@ func TestAppLoginPageUsesAppOAuthFlow(t *testing.T) {
 	}
 	if location := rec.Header().Get("Location"); location != "https://example.com/notes?ohmesh_login=success" {
 		t.Fatalf("existing app session should return to app, got %q", location)
+	}
+}
+
+func TestLoginPageHidesUnconfiguredProviders(t *testing.T) {
+	cfg := newTestConfig()
+	router, db := newTestRouterWithConfig(t, cfg)
+
+	owner := models.User{Email: "owner@example.com", Name: "Owner"}
+	if err := db.Create(&owner).Error; err != nil {
+		t.Fatal(err)
+	}
+	app := models.App{
+		OwnerID:            owner.ID,
+		Slug:               "notes",
+		Name:               "Notes",
+		DefaultRedirectURL: "https://example.com/notes",
+		Status:             models.AppStatusActive,
+	}
+	if err := db.Create(&app).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/login?app=notes&redirect_url=https://example.com/notes", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "GitHub") || strings.Contains(body, "Google") {
+		t.Fatalf("unconfigured providers should not render: %s", body)
+	}
+	if strings.Contains(body, "GITHUB_CLIENT") || strings.Contains(body, "GOOGLE_CLIENT") {
+		t.Fatalf("login page should not expose provider environment names: %s", body)
+	}
+	if !strings.Contains(body, "사용 가능한 로그인 방법이 없습니다.") {
+		t.Fatalf("login page should show empty state when no providers are configured: %s", body)
 	}
 }
 
@@ -404,6 +441,15 @@ func TestRecordCRUDUsesCurrentUserAndApp(t *testing.T) {
 }
 
 func newTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
+	cfg := newTestConfig()
+	cfg.GitHubClientID = "github-client"
+	cfg.GitHubClientSecret = "github-secret"
+	cfg.GoogleClientID = "google-client"
+	cfg.GoogleClientSecret = "google-secret"
+	return newTestRouterWithConfig(t, cfg)
+}
+
+func newTestRouterWithConfig(t *testing.T, cfg config.Config) (*gin.Engine, *gorm.DB) {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
@@ -416,19 +462,17 @@ func newTestRouter(t *testing.T) (*gin.Engine, *gorm.DB) {
 		t.Fatal(err)
 	}
 
-	cfg := config.Config{
-		Addr:               ":0",
-		DatabasePath:       ":memory:",
-		SessionSecret:      "test-secret",
-		SessionCookieName:  "ohmesh_session",
-		SessionTTL:         time.Hour,
-		GitHubClientID:     "github-client",
-		GitHubClientSecret: "github-secret",
-		GoogleClientID:     "google-client",
-		GoogleClientSecret: "google-secret",
-	}
-
 	return New(db, cfg), db
+}
+
+func newTestConfig() config.Config {
+	return config.Config{
+		Addr:              ":0",
+		DatabasePath:      ":memory:",
+		SessionSecret:     "test-secret",
+		SessionCookieName: "ohmesh_session",
+		SessionTTL:        time.Hour,
+	}
 }
 
 func createTestSession(t *testing.T, db *gorm.DB, userID, appID uint) string {

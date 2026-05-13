@@ -307,6 +307,23 @@
       margin-bottom: 18px;
     }
     .toolbar label { min-width: min(420px, 100%); }
+    .record-filter-panel {
+      margin-top: 18px;
+    }
+    .filter-form {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.45fr) minmax(220px, 1.45fr) minmax(140px, 0.7fr) auto;
+      gap: 14px;
+      align-items: end;
+    }
+    .filter-actions {
+      display: flex;
+      align-items: flex-end;
+    }
+    .filter-actions button {
+      width: 100%;
+      white-space: nowrap;
+    }
     .inline-actions {
       display: flex;
       align-items: center;
@@ -495,7 +512,7 @@
       background: white;
     }
     @media (max-width: 860px) {
-      .hero, .two-col, .grid, .form-grid, .steps { grid-template-columns: 1fr; }
+      .hero, .two-col, .grid, .form-grid, .filter-form, .steps { grid-template-columns: 1fr; }
       .nav { align-items: flex-start; flex-direction: column; padding-top: 12px; padding-bottom: 12px; }
       main { padding-top: 24px; }
     }

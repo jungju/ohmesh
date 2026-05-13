@@ -187,6 +187,12 @@ func TestWebPagesRender(t *testing.T) {
 	if !strings.Contains(body, `<dialog id="run-prompt-dialog"`) {
 		t.Fatalf("admin apps should render run prompt dialog: %s", body)
 	}
+	if !strings.Contains(body, `class="filter-form"`) {
+		t.Fatalf("admin apps should render wide record filter form: %s", body)
+	}
+	if strings.Contains(body, "레코드 만들기") || strings.Contains(body, `action="/admin/apps/notes/db/records"`) {
+		t.Fatalf("admin apps should not render manual record creation form: %s", body)
+	}
 	if !strings.Contains(body, `href="/login?app=notes&amp;redirect_url=https%3A%2F%2Fexample.com%2Fnotes"`) {
 		t.Fatalf("admin apps should link to selected app login page: %s", body)
 	}

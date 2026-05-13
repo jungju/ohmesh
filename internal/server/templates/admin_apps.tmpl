@@ -241,58 +241,26 @@
     </div>
   </div>
 
-  <section class="two-col">
-    <div class="panel">
-      <h3>필터</h3>
-      <form method="get" action="/admin/apps" class="form-grid">
-        <input type="hidden" name="app" value="{{.Slug}}">
-        <label>
-          Type
-          <input name="type" value="{{$.TypeFilter}}" placeholder="note">
-        </label>
-        <label>
-          User ID
-          <input name="user_id" value="{{$.UserIDFilter}}" placeholder="1">
-        </label>
-        <label>
-          Limit
-          <input name="limit" type="number" min="1" max="500" value="{{$.Limit}}">
-        </label>
-        <div style="align-self:end;">
-          <button type="submit">필터 적용</button>
-        </div>
-      </form>
-    </div>
-
-    <div class="panel">
-      <h3>레코드 만들기</h3>
-      {{if $.RecordUsers}}
-        <form method="post" action="/admin/apps/{{.Slug}}/db/records" class="form-grid">
-          <label>
-            User
-            <select name="user_id" required>
-              <option value="">사용자 선택</option>
-              {{range $.RecordUsers}}
-                <option value="{{.ID}}">{{if .Email}}{{.Email}}{{else}}User {{.ID}}{{end}} (#{{.ID}})</option>
-              {{end}}
-            </select>
-          </label>
-          <label>
-            Type
-            <input name="type" placeholder="note" required>
-          </label>
-          <label class="wide">
-            Data JSON
-            <textarea name="data" required>{"title":"Hello"}</textarea>
-          </label>
-          <div class="wide">
-            <button type="submit">레코드 만들기</button>
-          </div>
-        </form>
-      {{else}}
-        <div class="empty">레코드를 만들 수 있는 사용자가 아직 없습니다.</div>
-      {{end}}
-    </div>
+  <section class="panel record-filter-panel">
+    <h3>필터</h3>
+    <form method="get" action="/admin/apps" class="filter-form">
+      <input type="hidden" name="app" value="{{.Slug}}">
+      <label>
+        Type
+        <input name="type" value="{{$.TypeFilter}}" placeholder="note">
+      </label>
+      <label>
+        User ID
+        <input name="user_id" value="{{$.UserIDFilter}}" placeholder="1">
+      </label>
+      <label>
+        Limit
+        <input name="limit" type="number" min="1" max="500" value="{{$.Limit}}">
+      </label>
+      <div class="filter-actions">
+        <button type="submit">필터 적용</button>
+      </div>
+    </form>
   </section>
 
   <div class="section">

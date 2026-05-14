@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"html/template"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -20,6 +21,9 @@ import (
 
 //go:embed templates/*.tmpl
 var templateFiles embed.FS
+
+//go:embed static
+var staticFiles embed.FS
 
 type loginProvider struct {
 	Name     string
@@ -67,6 +71,14 @@ func mustTemplates() *template.Template {
 	}
 
 	return template.Must(template.New("").Funcs(funcs).ParseFS(templateFiles, "templates/*.tmpl"))
+}
+
+func mustStaticFiles() http.FileSystem {
+	files, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		panic(err)
+	}
+	return http.FS(files)
 }
 
 func (s *Server) render(c *gin.Context, status int, name string, data gin.H) {

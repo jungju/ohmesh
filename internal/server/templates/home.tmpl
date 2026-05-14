@@ -1,9 +1,10 @@
 {{define "home.tmpl"}}
 {{template "shell_start" .}}
-<section class="hero">
-  <div>
-    <h1>DB Free!</h1>
-    <p class="lede">정적 앱에 로그인과 사용자별 JSON 저장소를 바로 붙이세요. 앱은 화면과 API 호출에 집중하고, OAuth 세션과 데이터 스코핑은 ohmesh가 맡습니다.</p>
+<section class="hero intro-hero">
+  <div class="hero-copy">
+    <p class="eyebrow">Static apps. Real sessions.</p>
+    <h1>ohmesh</h1>
+    <p class="lede hero-lede">정적 앱에 로그인과 사용자별 JSON 저장소를 붙이는 작은 백엔드입니다. 앱은 화면에 집중하고, OAuth 세션과 데이터 스코핑은 ohmesh가 맡습니다.</p>
     <div class="actions">
       {{if .IsLoggedIn}}
         <a class="button" href="/dashboard">대시보드 열기</a>
@@ -13,59 +14,152 @@
         <a class="button secondary" href="/admin/apps">앱 관리</a>
       {{end}}
     </div>
+    <div class="hero-facts" aria-label="ohmesh 핵심 기능">
+      <span>OAuth login</span>
+      <span>HttpOnly session</span>
+      <span>Scoped JSON CRUD</span>
+    </div>
   </div>
-  <div class="panel map" aria-label="ohmesh architecture preview">
-    <div class="node main">
-      <strong>Static app</strong>
-      <p class="muted">로그인 버튼과 앱 화면</p>
-    </div>
-    <div class="grid">
-      <div class="node"><strong>app ID</strong><br><span class="muted">앱 전용 로그인</span></div>
-      <div class="node"><strong>GitHub/Google</strong><br><span class="muted">OAuth 인증</span></div>
-      <div class="node"><strong>callback</strong><br><span class="muted">앱으로 복귀</span></div>
-    </div>
-    <div class="node">
-      <strong>ohmesh API</strong>
-      <p class="muted">쿠키 세션으로 사용자별 JSON 데이터를 읽고 씁니다.</p>
-    </div>
+  <figure class="intro-photo intro-photo-hero">
+    <img src="/static/intro/intro-hero.png" width="1344" height="768" alt="정적 앱 인터페이스가 중앙 API 서비스와 연결된 노트북 화면" fetchpriority="high">
+  </figure>
+</section>
+
+<section class="intro-split intro-problem">
+  <figure class="intro-photo">
+    <img src="/static/intro/static-app-workbench.png" width="1184" height="864" alt="정적 앱 와이어프레임을 작업하는 개발자 책상" loading="lazy">
+  </figure>
+  <div class="intro-copy">
+    <p class="eyebrow">Why ohmesh</p>
+    <h2>정적 앱은 쉬운데, 로그인부터 복잡해집니다</h2>
+    <p>GitHub Pages나 커스텀 도메인에 올린 앱도 사용자 데이터가 필요해지는 순간이 옵니다. 그때마다 OAuth callback, 쿠키, CORS, 사용자별 데이터 격리를 새로 만들 필요는 없습니다.</p>
+    <ul class="intro-list">
+      <li>앱별 허용 도메인과 redirect URL을 검증합니다.</li>
+      <li>앱 전용 HttpOnly 쿠키로 세션을 유지합니다.</li>
+      <li>레코드는 앱과 현재 사용자 세션 기준으로만 보입니다.</li>
+    </ul>
   </div>
 </section>
 
-<section class="guide-hero">
-  <strong>No backend. No database.</strong>
-  <h2>앱 전용 ID 하나로 로그인, 세션, 데이터 API까지 연결합니다</h2>
-  <p class="lede">사용자는 정적 앱에서 시작해 ohmesh 로그인 페이지를 거친 뒤 다시 앱으로 돌아옵니다. 그 다음부터 앱은 쿠키가 포함된 요청으로 인증된 ohmesh API를 바로 호출합니다.</p>
-</section>
-
-<section class="steps home-steps" aria-label="Auth setup steps">
-  <div class="step">
-    <h3>앱에서 로그인 클릭</h3>
-    <p>사용자 앱은 ohmesh의 OAuth 시작 URL로 이동시킵니다. 앱 slug와 돌아올 redirect URL을 함께 보냅니다.</p>
-    <pre>/login?app=notes&amp;redirect_url={앱_복귀_URL}</pre>
+<section class="intro-section">
+  <div class="section-heading">
+    <p class="eyebrow">How it works</p>
+    <h2>앱 slug 하나로 이어지는 로그인 흐름</h2>
+    <p class="lede">사용자는 정적 앱에서 시작해 ohmesh 로그인 페이지를 거친 뒤 다시 앱으로 돌아옵니다. 그 다음부터 앱은 쿠키가 포함된 요청으로 인증된 ohmesh API를 호출합니다.</p>
   </div>
-  <div class="step">
-    <h3>ohmesh가 인증 처리</h3>
-    <p>ohmesh는 앱 전용 로그인 페이지와 GitHub/Google 로그인을 처리하고, 성공하면 앱별 HttpOnly 세션 쿠키를 발급합니다.</p>
-    <pre>Set-Cookie: ohmesh_session_app_...=...
+  <div class="flow-showcase">
+    <div class="steps home-steps" aria-label="Auth setup steps">
+      <div class="step">
+        <h3>앱에서 로그인 클릭</h3>
+        <p>사용자 앱은 ohmesh의 OAuth 시작 URL로 이동합니다. 앱 slug와 돌아올 redirect URL을 함께 보냅니다.</p>
+        <pre>/login?app=notes&amp;redirect_url={앱_복귀_URL}</pre>
+      </div>
+      <div class="step">
+        <h3>ohmesh가 인증 처리</h3>
+        <p>ohmesh는 앱 전용 로그인 페이지와 GitHub/Google 로그인을 처리하고, 성공하면 앱별 세션 쿠키를 발급합니다.</p>
+        <pre>Set-Cookie: ohmesh_session_app_...
 Location: {앱_복귀_URL}</pre>
-  </div>
-  <div class="step">
-    <h3>앱이 API 호출</h3>
-    <p>앱은 쿠키가 포함되도록 요청하고, ohmesh는 세션에 맞는 사용자 데이터만 응답합니다.</p>
-    <pre>fetch("https://ohmesh.example.com/auth/me?app=notes", {
+      </div>
+      <div class="step">
+        <h3>앱이 API 호출</h3>
+        <p>앱은 쿠키가 포함되도록 요청하고, ohmesh는 세션에 맞는 사용자 데이터만 응답합니다.</p>
+        <pre>fetch("/auth/me?app=notes", {
   credentials: "include"
 })</pre>
+      </div>
+    </div>
+    <figure class="intro-photo">
+      <img src="/static/intro/oauth-handoff.png" width="1184" height="864" alt="노트북과 휴대폰 사이에 안전한 로그인 흐름이 이어지는 화면" loading="lazy">
+    </figure>
   </div>
 </section>
 
-<section class="two-col home-summary">
-  <div class="plain-panel">
-    <h2>사용자 앱이 하는 일</h2>
-    <p>로그인 버튼을 만들고, 로그인 후 <code>/auth/me?app={slug}</code>로 인증 상태를 확인합니다. API 호출에는 <code>credentials: "include"</code>를 넣어 ohmesh 쿠키가 함께 가도록 합니다.</p>
+<section class="intro-section">
+  <div class="section-heading">
+    <p class="eyebrow">Core features</p>
+    <h2>로그인, 세션, 사용자별 JSON 저장소까지 한 번에</h2>
   </div>
-  <div class="plain-panel">
-    <h2>ohmesh가 맡는 일</h2>
-    <p>OAuth 로그인, 세션 쿠키, 허용된 앱 도메인과 redirect URL 검증, 사용자별 JSON CRUD를 담당합니다. 사용자 앱은 별도 서버나 DB 없이 인증된 데이터 API를 사용합니다.</p>
+  <div class="feature-layout">
+    <div class="feature-grid">
+      <article class="feature-card">
+        <h3>OAuth 로그인</h3>
+        <p>GitHub/Google OAuth 시작과 callback 처리를 ohmesh가 맡습니다.</p>
+      </article>
+      <article class="feature-card">
+        <h3>앱별 세션</h3>
+        <p>앱 전용 HttpOnly 쿠키로 정적 앱의 로그인 상태를 유지합니다.</p>
+      </article>
+      <article class="feature-card">
+        <h3>도메인 검증</h3>
+        <p>등록된 앱 도메인과 redirect URL만 허용해 복귀 흐름을 제한합니다.</p>
+      </article>
+      <article class="feature-card">
+        <h3>JSON CRUD</h3>
+        <p>사용자와 앱 범위로 격리된 JSON 레코드를 SQLite에 저장합니다.</p>
+      </article>
+    </div>
+    <figure class="intro-photo">
+      <img src="/static/intro/json-storage.png" width="1184" height="864" alt="사용자별 JSON 데이터 저장소를 추상적으로 보여주는 모니터 화면" loading="lazy">
+    </figure>
+  </div>
+</section>
+
+<section class="intro-split intro-split-reverse">
+  <figure class="intro-photo intro-photo-wide">
+    <img src="/static/intro/app-gallery.png" width="1344" height="768" alt="여러 정적 앱 화면이 하나의 작은 백엔드 허브에 연결된 장면" loading="lazy">
+  </figure>
+  <div class="intro-copy">
+    <p class="eyebrow">Use cases</p>
+    <h2>작은 앱들이 같은 인증과 저장소를 공유합니다</h2>
+    <p>노트, 투두, 북마크, 내부 대시보드처럼 사용자별 상태가 필요한 정적 앱에 잘 맞습니다. 각 앱은 slug와 도메인을 등록하고 필요한 JSON 레코드만 읽고 씁니다.</p>
+    <div class="tag-list" aria-label="ohmesh 사용 사례">
+      <span>Notes</span>
+      <span>Tasks</span>
+      <span>Dashboards</span>
+      <span>Bookmarks</span>
+      <span>Forms</span>
+    </div>
+  </div>
+</section>
+
+<section class="intro-section quickstart">
+  <div>
+    <p class="eyebrow">Quick start</p>
+    <h2>프론트엔드에서는 쿠키를 포함해 호출하면 됩니다</h2>
+    <div class="code-grid">
+      <pre>await fetch("https://ohmesh.example.com/auth/me?app=notes", {
+  credentials: "include"
+})</pre>
+      <pre>await fetch("https://ohmesh.example.com/api/apps/notes/records", {
+  method: "POST",
+  credentials: "include",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    type: "note",
+    data: { title: "Hello", done: false }
+  })
+})</pre>
+    </div>
+    <div class="intro-note">
+      OAuth access token, refresh token, raw session token은 API 응답에 반환하지 않습니다.
+    </div>
+  </div>
+  <figure class="intro-photo intro-photo-wide">
+    <img src="/static/intro/small-deploy.png" width="1344" height="768" alt="가벼운 웹 서비스를 위한 작은 배포 장비와 노트북" loading="lazy">
+  </figure>
+</section>
+
+<section class="intro-cta">
+  <h2>정적 앱에 작은 백엔드를 붙여보세요</h2>
+  <p>앱을 등록하고 redirect URL을 연결하면, 로그인과 사용자별 저장소를 바로 사용할 수 있습니다.</p>
+  <div class="actions">
+    {{if .IsLoggedIn}}
+      <a class="button" href="/admin/apps">앱 등록하기</a>
+      <a class="button secondary" href="/openapi.json">API 가이드 보기</a>
+    {{else}}
+      <a class="button" href="/login">시작하기</a>
+      <a class="button secondary" href="/openapi.json">API 가이드 보기</a>
+    {{end}}
   </div>
 </section>
 {{template "shell_end" .}}

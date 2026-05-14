@@ -50,6 +50,7 @@ func New(db *gorm.DB, cfg config.Config) *gin.Engine {
 	router := gin.New()
 	router.SetHTMLTemplate(mustTemplates())
 	router.Use(gin.Logger(), gin.Recovery(), s.corsMiddleware())
+	router.StaticFS("/static", mustStaticFiles())
 
 	router.GET("/", s.homePage)
 	router.GET("/login", s.loginPage)

@@ -9,6 +9,8 @@ TMP_DIR ?= tmp
 PID_FILE ?= $(TMP_DIR)/ohmesh.pid
 LOG_FILE ?= $(TMP_DIR)/ohmesh.log
 GITHUB_OWNER ?= jungju
+DOCKER ?= docker
+DOCKER_PLATFORM ?= linux/arm64
 IMAGE ?= ghcr.io/$(GITHUB_OWNER)/ohmesh:main
 K8S_NAMESPACE ?= ohmesh
 AIR ?= air
@@ -34,6 +36,7 @@ export GOOGLE_CLIENT_ID
 export GOOGLE_CLIENT_SECRET
 
 .PHONY: help env deps fmt test build check install-air dev run start stop restart status logs health clean \
+	docker-build-push-arm64 \
 	k8s-deploy k8s-status k8s-logs k8s-delete k8s-port-forward k8s-oauth-secret k8s-ghcr-secret package-watch
 
 help:
@@ -55,6 +58,7 @@ help:
 	@echo "  make logs      Tail background API logs"
 	@echo "  make health    Check /healthz"
 	@echo "  make clean     Remove local build and runtime files"
+	@echo "  make docker-build-push-arm64 Build and push $(IMAGE) for linux/arm64"
 	@echo "  make k8s-deploy       Deploy to Kubernetes with kubectl"
 	@echo "  make k8s-status       Show Kubernetes resources"
 	@echo "  make k8s-logs         Tail Kubernetes deployment logs"
@@ -174,6 +178,9 @@ health:
 clean: stop
 	rm -rf "$(BIN_DIR)"
 	rm -f "$(TMP_DIR)"/ohmesh.db "$(TMP_DIR)"/ohmesh.db-* "$(LOG_FILE)"
+
+docker-build-push-arm64:
+	"$(DOCKER)" buildx build --platform "$(DOCKER_PLATFORM)" -t "$(IMAGE)" --push .
 
 k8s-deploy:
 	kubectl apply -k deploy/k8s

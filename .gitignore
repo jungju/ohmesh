@@ -1,8 +1,6 @@
 .env
 /ohmesh
 bin/
-tmp/*
+tmp/
 *.db
 *.db-*
-!tmp/
-!tmp/ohmesh.db

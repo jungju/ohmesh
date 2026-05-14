@@ -14,7 +14,7 @@ K8S_NAMESPACE ?= ohmesh
 AIR ?= air
 AIR_INSTALL ?= github.com/air-verse/air@latest
 
-OHMESH_ADDR ?= :8081
+OHMESH_ADDR ?= :8080
 OHMESH_DATABASE_PATH ?= $(TMP_DIR)/ohmesh.db
 OHMESH_SESSION_SECRET ?= local-dev-secret-change-me
 OHMESH_SESSION_COOKIE ?= ohmesh_session
@@ -58,7 +58,7 @@ help:
 	@echo "  make k8s-deploy       Deploy to Kubernetes with kubectl"
 	@echo "  make k8s-status       Show Kubernetes resources"
 	@echo "  make k8s-logs         Tail Kubernetes deployment logs"
-	@echo "  make k8s-port-forward Port-forward Kubernetes service to localhost:8081"
+	@echo "  make k8s-port-forward Port-forward Kubernetes service to localhost:8080"
 	@echo "  make k8s-delete       Delete Kubernetes resources"
 	@echo "  make k8s-ghcr-secret  Create/update GHCR pull secret named github"
 	@echo "  make package-watch    Watch the latest container build workflow"
@@ -189,7 +189,7 @@ k8s-delete:
 	kubectl delete -k deploy/k8s
 
 k8s-port-forward:
-	kubectl -n "$(K8S_NAMESPACE)" port-forward svc/ohmesh 8081:80
+	kubectl -n "$(K8S_NAMESPACE)" port-forward svc/ohmesh 8080:80
 
 k8s-oauth-secret:
 	kubectl create namespace "$(K8S_NAMESPACE)" --dry-run=client -o yaml | kubectl apply -f -

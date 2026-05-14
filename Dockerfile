@@ -25,6 +25,6 @@ WORKDIR /app
 
 COPY --from=build /out/ohmesh /app/ohmesh
 
-EXPOSE 8081
+EXPOSE 8080
 
 ENTRYPOINT ["/app/ohmesh"]

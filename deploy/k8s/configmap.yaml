@@ -5,11 +5,11 @@ metadata:
   labels:
     app.kubernetes.io/name: ohmesh
 data:
-  OHMESH_ADDR: ":8081"
+  OHMESH_ADDR: ":8080"
   OHMESH_DATABASE_PATH: "/data/ohmesh.db"
   OHMESH_ENV: "production"
   OHMESH_SESSION_COOKIE: "ohmesh_session"
   OHMESH_SESSION_TTL: "720h"
   OHMESH_COOKIE_SECURE: "true"
-  OHMESH_ALLOWED_ORIGINS: "https://ohmesh.okgo.click,http://localhost:8081"
+  OHMESH_ALLOWED_ORIGINS: "https://ohmesh.okgo.click,http://localhost:8080"
   OHMESH_SESSION_SECRET: "local-dev-secret-change-me"

@@ -21,7 +21,7 @@ make health
 Then open:
 
 ```text
-http://localhost:8081
+http://localhost:8080
 ```
 
 Useful local commands:
@@ -63,7 +63,7 @@ make k8s-port-forward
 Then open:
 
 ```text
-http://localhost:8081
+http://localhost:8080
 ```
 
 The Kubernetes ingress host is:
@@ -99,13 +99,13 @@ For production frontends on separate domains, serve ohmesh over HTTPS and set
 Register the OAuth callback URL in GitHub as:
 
 ```text
-http://localhost:8081/auth/github/callback
+http://localhost:8080/auth/github/callback
 ```
 
 Register the OAuth callback URL in Google as:
 
 ```text
-http://localhost:8081/auth/google/callback
+http://localhost:8080/auth/google/callback
 ```
 
 ## Core Endpoints

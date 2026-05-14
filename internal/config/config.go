@@ -24,7 +24,7 @@ type Config struct {
 
 func Load() Config {
 	return Config{
-		Addr:               envString("OHMESH_ADDR", ":8081"),
+		Addr:               envString("OHMESH_ADDR", ":8080"),
 		DatabasePath:       envString("OHMESH_DATABASE_PATH", "ohmesh.db"),
 		Environment:        envString("OHMESH_ENV", "development"),
 		SessionSecret:      envString("OHMESH_SESSION_SECRET", "dev-secret-change-me"),

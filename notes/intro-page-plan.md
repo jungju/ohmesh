@@ -95,13 +95,13 @@
 포함할 코드:
 
 ```js
-await fetch("https://ohmesh.example.com/auth/me?app=notes", {
+await fetch("https://ohmesh.okgo.click/auth/me?app=notes", {
   credentials: "include"
 })
 ```
 
 ```js
-await fetch("https://ohmesh.example.com/api/apps/notes/records", {
+await fetch("https://ohmesh.okgo.click/api/apps/notes/records", {
   method: "POST",
   credentials: "include",
   headers: { "Content-Type": "application/json" },

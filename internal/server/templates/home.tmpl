@@ -127,10 +127,10 @@ Location: {앱_복귀_URL}</pre>
     <p class="eyebrow">Quick start</p>
     <h2>프론트엔드에서는 쿠키를 포함해 호출하면 됩니다</h2>
     <div class="code-grid">
-      <pre>await fetch("https://ohmesh.example.com/auth/me?app=notes", {
+      <pre>await fetch("https://ohmesh.okgo.click/auth/me?app=notes", {
   credentials: "include"
 })</pre>
-      <pre>await fetch("https://ohmesh.example.com/api/apps/notes/records", {
+      <pre>await fetch("https://ohmesh.okgo.click/api/apps/notes/records", {
   method: "POST",
   credentials: "include",
   headers: { "Content-Type": "application/json" },
@@ -155,10 +155,10 @@ Location: {앱_복귀_URL}</pre>
   <div class="actions">
     {{if .IsLoggedIn}}
       <a class="button" href="/admin/apps">앱 등록하기</a>
-      <a class="button secondary" href="/openapi.json">API 가이드 보기</a>
+      <a class="button secondary" href="https://ohmesh.okgo.click/openapi.json">API 가이드 보기</a>
     {{else}}
       <a class="button" href="/login">시작하기</a>
-      <a class="button secondary" href="/openapi.json">API 가이드 보기</a>
+      <a class="button secondary" href="https://ohmesh.okgo.click/openapi.json">API 가이드 보기</a>
     {{end}}
   </div>
 </section>

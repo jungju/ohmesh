@@ -162,6 +162,9 @@
     }
     .intro-photo {
       margin: 0;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
       aspect-ratio: 4 / 3;
       overflow: hidden;
       border: 1px solid var(--line);
@@ -175,6 +178,7 @@
     .intro-photo img {
       display: block;
       width: 100%;
+      max-width: 100%;
       height: 100%;
       object-fit: cover;
     }
@@ -231,6 +235,9 @@
       grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
       gap: 20px;
       align-items: stretch;
+    }
+    .flow-showcase > *, .feature-layout > *, .quickstart > * {
+      min-width: 0;
     }
     .flow-showcase .home-steps {
       grid-template-columns: 1fr;
